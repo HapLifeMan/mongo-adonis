@@ -1,0 +1,13 @@
+node_modules
+.DS_Store
+coverage
+.nyc_output
+.env
+tmp
+build
+dist
+.vscode
+.idea
+*.log
+*.tsbuildinfo
+*.tgz

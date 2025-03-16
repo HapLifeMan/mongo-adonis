@@ -1,0 +1,98 @@
+{
+  "name": "mongo-adonis",
+  "version": "1.0.0",
+  "description": "MongoDB adapter for Lucid ORM (AdonisJS 6)",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "build",
+    "stubs"
+  ],
+  "exports": {
+    ".": {
+      "types": "./build/src/index.d.ts",
+      "default": "./build/src/index.js"
+    },
+    "./database_provider": {
+      "types": "./build/providers/database_provider.d.ts",
+      "default": "./build/providers/database_provider.js"
+    }
+  },
+  "scripts": {
+    "clean": "del-cli build",
+    "build": "npm run clean && tsc && cp -r stubs build/",
+    "test": "node --import ./loader.js tests/setup.ts",
+    "test:coverage": "c8 node --import ./loader.js tests/setup.ts",
+    "test:ci": "npm run lint && npm run test",
+    "lint": "eslint . --ext=.ts",
+    "format": "prettier --write .",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "adonisjs",
+    "adonis-framework",
+    "mongo",
+    "mongodb",
+    "lucid",
+    "orm",
+    "typescript",
+    "nodejs",
+    "database",
+    "nosql",
+    "adapter"
+  ],
+  "author": "Thomas Reichling",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haplifeman/mongo-adonis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/haplifeman/mongo-adonis/issues"
+  },
+  "dependencies": {
+    "@adonisjs/core": "^6.17.2",
+    "@poppinss/hooks": "^7.2",
+    "@poppinss/macroable": "^1.0",
+    "@swc/core": "^1.11.11",
+    "kleur": "^4.1.5",
+    "mongodb": "6",
+    "pluralize": "^8.0.0",
+    "pretty-hrtime": "^1.0.3"
+  },
+  "peerDependencies": {
+    "@adonisjs/core": "^6.0.0"
+  },
+  "devDependencies": {
+    "@adonisjs/tsconfig": "^1.2.0",
+    "@japa/assert": "^4.0.1",
+    "@japa/runner": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "@types/pluralize": "^0.0.30",
+    "@types/pretty-hrtime": "^1.0.2",
+    "c8": "^8.0.0",
+    "del-cli": "^5.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest"
+  },
+  "c8": {
+    "reporter": [
+      "text",
+      "html"
+    ],
+    "exclude": [
+      "tests/**",
+      "bin/**"
+    ]
+  }
+}

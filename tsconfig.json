@@ -1,0 +1,10 @@
+{
+  "extends": "@adonisjs/tsconfig/tsconfig.package.json",
+  "compilerOptions": {
+    "rootDir": "./",
+    "outDir": "./build",
+    "allowJs": true,
+    "lib": ["ES2015", "ES2020"],
+    "types": ["node"]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "mongo-adonis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MongoDB adapter for Lucid ORM (AdonisJS 6)",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -14,8 +14,8 @@
   ],
   "exports": {
     ".": {
-      "types": "./build/src/index.d.ts",
-      "default": "./build/src/index.js"
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
     },
     "./database_provider": {
       "types": "./build/providers/database_provider.d.ts",

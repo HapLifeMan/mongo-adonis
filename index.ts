@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+export * from './src/index.js'
 export * as errors from './src/errors.js'
 export { configure } from './configure.js'
 export { stubsRoot } from './stubs/main.js'

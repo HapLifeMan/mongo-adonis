@@ -38,11 +38,30 @@ export async function configure(command: Configure) {
    */
   await codemods.defineEnvVariables({
     MONGODB_CONNECTION: 'mongodb',
+    MONGODB_CONNECTION_STRING: 'mongodb://localhost:27017/mongo-adonis',
     MONGODB_HOST: '127.0.0.1',
     MONGODB_PORT: '27017',
-    MONGODB_USER: '',
+    MONGODB_USER: 'admin',
     MONGODB_PASSWORD: '',
-    MONGODB_DATABASE: 'lucid'
+    MONGODB_DATABASE: 'mongo-adonis',
+    MONGODB_AUTH_SOURCE: 'admin',
+  })
+
+  /**
+   * Add environment validations
+   */
+  await codemods.defineEnvValidations({
+    leadingComment: 'App environment variables',
+    variables: {
+      MONGODB_CONNECTION: 'Env.schema.string()',
+      MONGODB_CONNECTION_STRING: 'Env.schema.optional(Env.schema.string())',
+      MONGODB_HOST: 'Env.schema.string()',
+      MONGODB_PORT: 'Env.schema.number()',
+      MONGODB_USER: 'Env.schema.optional(Env.schema.string())',
+      MONGODB_PASSWORD: 'Env.schema.optional(Env.schema.string())',
+      MONGODB_DATABASE: 'Env.schema.string()',
+      MONGODB_AUTH_SOURCE: 'Env.schema.optional(Env.schema.string())',
+    }
   })
 
   /**

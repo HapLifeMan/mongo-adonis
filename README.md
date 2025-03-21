@@ -47,11 +47,13 @@ node ace configure mongo-adonis
 ### 3. Fill Environment Variables
 
 ```env
+MONGODB_CONNECTION=mongodb
+MONGODB_CONNECTION_STRING=mongodb://localhost:27017/mongo-adonis
 MONGODB_HOST=127.0.0.1
 MONGODB_PORT=27017
-MONGODB_USER=username
-MONGODB_PASSWORD=password
-MONGODB_DATABASE=adonis
+MONGODB_USER=
+MONGODB_PASSWORD=
+MONGODB_DATABASE=mongo-adonis
 MONGODB_AUTH_SOURCE=admin
 ```
 
@@ -188,7 +190,7 @@ await post.user.dissociate()
 
 ## 🔐 Authentication
 
-Works seamlessly with AdonisJS 6 auth, update the `models/auth.ts` content:
+Works seamlessly with AdonisJS 6 auth, update the `app/models/user.ts` file:
 
 ```ts
 import { DateTime } from 'luxon'

@@ -25,10 +25,6 @@ export default defineConfig({
         database: process.env.MONGODB_DATABASE || 'adonis',
         authSource: process.env.MONGODB_AUTH_SOURCE || 'admin',
       },
-      pool: {
-        min: 1,
-        max: 10,
-      },
     },
   },
 })

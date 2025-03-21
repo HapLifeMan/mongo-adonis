@@ -24,4 +24,12 @@ import { MongoDBClient, getMongoDBClient } from './db.js'
  * Note: The MongoDB client must be initialized before using this export.
  * This is typically done by the Adonis service provider during application boot.
  */
-export const db: MongoDBClient = getMongoDBClient()
+export const db = new Proxy({}, {
+  get: (_target, prop) => {
+    // Get the MongoDB client (will throw if not initialized)
+    const client = getMongoDBClient()
+
+    // Forward the property access to the actual client
+    return client[prop as keyof typeof client]
+  }
+}) as MongoDBClient

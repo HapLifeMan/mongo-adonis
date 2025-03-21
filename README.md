@@ -16,6 +16,7 @@
 - 🔗 **Rich Relationships**: Support for HasOne, HasMany, BelongsTo relationships
 - 🎨 **Decorator Support**: Clean and declarative model definitions
 - 🔍 **Powerful Query Builder**: Fluent API for complex queries
+- 🧠 **Direct MongoDB Access**: Use MongoDB's native API directly with `db.collection.find({})`
 - 🔐 **Built-in Auth Support**: Works seamlessly with AdonisJS 6 auth
 - 📦 **Zero Configuration**: Get started with minimal setup
 
@@ -25,9 +26,9 @@
 - [ ] Improve query builder
 - [ ] Many-to-Many relationships
 - [ ] Paginate methods
-- [ ] Serializers (vanilla + JSON)
-- [ ] ? Migrations
-- [ ] ? Factories
+- [ ] Serializers (vanilla + JSON)
+- [ ] ? Migrations
+- [ ] ? Factories
 - [ ] ? Seeds
 
 ## 🚀 Quick Start

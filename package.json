@@ -1,6 +1,6 @@
 {
   "name": "mongo-adonis",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "MongoDB adapter for Lucid ORM (AdonisJS 6)",
   "main": "build/index.js",
   "types": "build/index.d.ts",

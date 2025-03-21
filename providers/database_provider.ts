@@ -13,6 +13,7 @@ import { MongoDatabase } from '../src/connection/database.js'
 import { MongoAdapter } from '../src/model/adapter.js'
 import { MongoQueryClient } from '../src/querybuilder/query_client.js'
 import { MongoModel } from '../src/model/base_model.js'
+import { initMongoDBClient } from '../src/db.js'
 import type { MongoConnectionContract, MongoQueryEventNode } from '../src/types/database.js'
 import type { MongoDBConfig } from '../src/define_config.js'
 
@@ -93,6 +94,9 @@ export default class MongoDBServiceProvider {
     // Force connection initialization before application starts handling requests
     const defaultConnection = db.connection()
     await defaultConnection.connect()
+
+    // Initialize the MongoDB client singleton for direct access
+    initMongoDBClient(db)
 
     await this.prettyPrintDebugQueries(db)
     // await this.registerTestUtils()

@@ -25,14 +25,14 @@ export type BaseColumnOptions = {
   serialize?: boolean
 
   /**
-   * Whether to prepare this column for database
+   * Function to transform the value before saving to database
    */
-  prepare?: boolean
+  prepare?: ((value: any) => any)
 
   /**
-   * Whether to consume this column from database
+   * Function to transform the value when loading from database
    */
-  consume?: boolean
+  consume?: ((value: any) => any)
 }
 
 /**
@@ -75,8 +75,10 @@ export function column(options?: ColumnOptions): PropertyDecorator {
     const columnName = options?.columnName || property.toString()
     const isPrimary = options?.isPrimary || false
     const serialize = options?.serialize !== false
-    const prepare = options?.prepare !== false
-    const consume = options?.consume !== false
+
+    // Handle prepare/consume functions
+    const prepare = options?.prepare
+    const consume = options?.consume
 
     target.$columnsDefinitions.set(property.toString(), {
       columnName,

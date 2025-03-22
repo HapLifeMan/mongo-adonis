@@ -139,6 +139,30 @@ export class MongoModel extends Macroable {
     return this.query<T>().all() as Promise<T[]>
   }
 
+  /**
+   * Create a model instance from a database result
+   * @internal
+   */
+  private static createModelFromResult<T extends MongoModel>(result: Record<string, any> | null): T | null {
+    if (!result) {
+      return null
+    }
+
+    const model = new this() as T
+
+    // Process the data with consume transformations
+    model.processFromDatabase(result)
+
+    // Set the primary key value and mark as not new
+    model.$primaryKeyValue = result[this.primaryKey]
+    model.$isNew = false
+
+    // Store original data
+    model.$original = { ...model.toObject() }
+
+    return model
+  }
+
   public static async find<T extends MongoModel>(id: string): Promise<T | null> {
     const query = this.query<T>()
     const constructor = this as unknown as MongoModelConstructor
@@ -147,7 +171,8 @@ export class MongoModel extends Macroable {
       await constructor.beforeFind(query)
     }
 
-    const model = await query.where(this.primaryKey, new ObjectId(id)).first() as T | null
+    const result = await query.where(this.primaryKey, new ObjectId(id)).first() as Record<string, any> | null
+    const model = this.createModelFromResult<T>(result)
 
     if (model && typeof constructor.afterFind === 'function') {
       await constructor.afterFind(model)
@@ -164,7 +189,8 @@ export class MongoModel extends Macroable {
       await constructor.beforeFind(query)
     }
 
-    const model = await query.where(key, value).first() as T | null
+    const result = await query.where(key, value).first() as Record<string, any> | null
+    const model = this.createModelFromResult<T>(result)
 
     if (model && typeof constructor.afterFind === 'function') {
       await constructor.afterFind(model)
@@ -214,9 +240,14 @@ export class MongoModel extends Macroable {
   ): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const model = await query.first() as T | null
+    const result = await query.first() as Record<string, any> | null
+    const model = this.createModelFromResult<T>(result)
 
-    return model || this.create<T>({ ...search, ...(data || {}) })
+    if (model) {
+      return model
+    }
+
+    return this.create<T>({ ...search, ...(data || {}) })
   }
 
   public static async firstOrNew<T extends MongoModel>(
@@ -225,9 +256,12 @@ export class MongoModel extends Macroable {
   ): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const model = await query.first() as T | null
+    const result = await query.first() as Record<string, any> | null
+    const model = this.createModelFromResult<T>(result)
 
-    if (model) return model
+    if (model) {
+      return model
+    }
 
     const newModel = new this() as T
     Object.assign(newModel, { ...search, ...(data || {}) })
@@ -243,7 +277,8 @@ export class MongoModel extends Macroable {
    * Instance Methods
    */
   public fill(attributes: Record<string, any>): this {
-    Object.assign(this, attributes)
+    // Process the data with consume transformations
+    this.processFromDatabase(attributes)
     return this
   }
 
@@ -363,7 +398,8 @@ export class MongoModel extends Macroable {
       return this
     }
 
-    Object.assign(this, model)
+    // Process the data with consume transformations
+    this.processFromDatabase(model)
     this.$original = { ...this.toObject() }
 
     return this
@@ -371,12 +407,68 @@ export class MongoModel extends Macroable {
 
   public toObject(): Record<string, any> {
     const obj: Record<string, any> = {}
+
+    // Get column definitions from prototype
+    const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
+
     for (const key in this) {
       if (Object.prototype.hasOwnProperty.call(this, key) && !key.startsWith('$')) {
-        obj[key] = this[key]
+        const value = this[key]
+
+        // Apply prepare transformations if saving to database
+        if (columnsDefinitions && columnsDefinitions.has(key)) {
+          const columnDef = columnsDefinitions.get(key)
+          const columnName = columnDef.columnName || key
+
+          // Apply prepare transformation if it's a function
+          if (typeof columnDef.prepare === 'function') {
+            obj[columnName] = columnDef.prepare(value)
+          } else {
+            obj[columnName] = value
+          }
+        } else {
+          obj[key] = value
+        }
       }
     }
     return obj
+  }
+
+  /**
+   * Process data when loading from database, applying consume transformations
+   */
+  private processFromDatabase(data: Record<string, any>): void {
+    // Get column definitions from prototype
+    const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
+
+    if (!columnsDefinitions) {
+      // If no column definitions, just copy all data
+      Object.assign(this, data)
+      return
+    }
+
+    // Process each property from the database
+    Object.entries(data).forEach(([key, value]) => {
+      // Find the property name associated with this column name
+      let propertyName = key
+      let foundColumnDef = null
+
+      // Look through definitions to find matching column
+      for (const [propName, def] of columnsDefinitions.entries()) {
+        if (def.columnName === key) {
+          propertyName = propName
+          foundColumnDef = def
+          break
+        }
+      }
+
+      // Apply consume transformation if it's a function
+      if (foundColumnDef && typeof foundColumnDef.consume === 'function') {
+        this[propertyName] = foundColumnDef.consume(value)
+      } else {
+        this[propertyName] = value
+      }
+    })
   }
 
   public toJSON(): Record<string, any> {

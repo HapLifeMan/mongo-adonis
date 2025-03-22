@@ -471,7 +471,77 @@ export class MongoModel extends Macroable {
     })
   }
 
+  /**
+   * Serialize the model for JSON responses, applying serialization rules
+   */
+  public serialize(): Record<string, any> {
+    const obj: Record<string, any> = {}
+
+    // Get column definitions from prototype
+    const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
+    const computedDefinitions = this.constructor.prototype?.$computedDefinitions
+
+    // Process regular attributes
+    for (const key in this) {
+      if (Object.prototype.hasOwnProperty.call(this, key) && !key.startsWith('$')) {
+        const value = this[key]
+
+        // Skip if the property should not be serialized
+        if (columnsDefinitions && columnsDefinitions.has(key)) {
+          const columnDef = columnsDefinitions.get(key)
+
+          // Skip if serialize is false
+          if (columnDef.serialize === false) continue
+
+          // Handle serializeAs
+          if (columnDef.serializeAs === null) {
+            // Exclude from serialization if serializeAs is null
+            continue
+          } else if (typeof columnDef.serializeAs === 'string') {
+            // Use custom name for serialization - don't apply prepare transformation
+            obj[columnDef.serializeAs] = value
+          } else {
+            // Default: use property name
+            obj[key] = value
+          }
+        } else {
+          // For non-decorated properties, include them by default
+          obj[key] = value
+        }
+      }
+    }
+
+    // Process computed properties
+    if (computedDefinitions) {
+      for (const [key, def] of computedDefinitions.entries()) {
+        // Skip if the computed property should not be serialized
+        if (def.serialize === false) continue
+
+        try {
+          // Access getter to get computed value
+          const value = this[key]
+
+          // Handle serializeAs for computed properties
+          if (def.serializeAs === null) {
+            // Exclude from serialization if serializeAs is null
+            continue
+          } else if (typeof def.serializeAs === 'string') {
+            // Use custom name for serialization
+            obj[def.serializeAs] = value
+          } else {
+            // Default: use property name
+            obj[key] = value
+          }
+        } catch (error) {
+          // Skip if accessing the getter throws an error
+        }
+      }
+    }
+
+    return obj
+  }
+
   public toJSON(): Record<string, any> {
-    return this.toObject()
+    return this.serialize()
   }
 }

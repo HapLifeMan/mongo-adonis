@@ -25,6 +25,13 @@ export type BaseColumnOptions = {
   serialize?: boolean
 
   /**
+   * The name to use for this column when serializing
+   * If string: use this name when serializing
+   * If null: don't include this column when serializing
+   */
+  serializeAs?: string | null
+
+  /**
    * Function to transform the value before saving to database
    */
   prepare?: ((value: any) => any)
@@ -75,6 +82,7 @@ export function column(options?: ColumnOptions): PropertyDecorator {
     const columnName = options?.columnName || property.toString()
     const isPrimary = options?.isPrimary || false
     const serialize = options?.serialize !== false
+    const serializeAs = options?.serializeAs
 
     // Handle prepare/consume functions
     const prepare = options?.prepare
@@ -84,6 +92,7 @@ export function column(options?: ColumnOptions): PropertyDecorator {
       columnName,
       isPrimary,
       serialize,
+      serializeAs,
       prepare,
       consume,
     })
@@ -110,6 +119,7 @@ export namespace column {
       const columnOptions: ColumnOptions = {
         columnName: options.columnName,
         serialize: options.serialize,
+        serializeAs: options.serializeAs,
         prepare: options.prepare,
         consume: options.consume,
       }
@@ -175,6 +185,13 @@ export type ComputedOptions = {
    * Whether to serialize this computed property
    */
   serialize?: boolean
+
+  /**
+   * The name to use for this property when serializing
+   * If string: use this name when serializing
+   * If null: don't include this property when serializing
+   */
+  serializeAs?: string | null
 }
 
 /**
@@ -190,9 +207,11 @@ export function computed(options?: ComputedOptions): PropertyDecorator {
     }
 
     const serialize = options?.serialize !== false
+    const serializeAs = options?.serializeAs
 
     target.$computedDefinitions.set(property.toString(), {
       serialize,
+      serializeAs,
     })
   }
 }

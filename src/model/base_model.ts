@@ -437,7 +437,7 @@ export class MongoModel extends Macroable {
   /**
    * Process data when loading from database, applying consume transformations
    */
-  private processFromDatabase(data: Record<string, any>): void {
+  public processFromDatabase(data: Record<string, any>): void {
     // Get column definitions from prototype
     const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
 
@@ -455,7 +455,7 @@ export class MongoModel extends Macroable {
 
       // Look through definitions to find matching column
       for (const [propName, def] of columnsDefinitions.entries()) {
-        if (def.columnName === key) {
+        if (def.columnName === key || propName === key) {
           propertyName = propName
           foundColumnDef = def
           break

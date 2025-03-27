@@ -292,4 +292,28 @@ test.group('Model Serialization', (group) => {
     // The serialized version should maintain the custom name and have the hashed password since that's what's stored
     assert.equal(fetchedSerialized.custom_password, 'hashed_secret123')
   })
+
+  test('consume transformations are applied when fetching from database', async ({ assert }) => {
+    // Create a model with transformed field
+    const model = await SerializationModel.create({
+      normalField: 'transform test',
+      transformedField: 'TRANSFORMED VALUE'
+    })
+
+    // Direct DB data should have uppercase value (no consume transformation)
+    const fromDb = await SerializationModel.query()
+      .where('_id', model._id)
+      .first() as Record<string, any>
+    assert.equal(fromDb.transformedField, 'transformed value')
+
+    // When fetching through the model, consume transformation should be applied
+    const fetched = await SerializationModel.find(model._id.toString())
+    assert.equal(fetched!.transformedField, 'transformed value')
+
+    // When using query().first(), consume transformation should also be applied now
+    const queried = await SerializationModel.query()
+      .where('_id', model._id)
+      .first()
+    assert.equal(queried!.transformedField, 'transformed value')
+  })
 })

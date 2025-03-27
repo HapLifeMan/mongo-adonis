@@ -410,8 +410,8 @@ export class MongoQueryBuilder<Model extends Document = Document> {
         return results.map(result => {
           const instance = new this.modelConstructor!() as any
 
-          // Set the attributes
-          Object.assign(instance, result)
+          // Use processFromDatabase to apply consume transformations
+          instance.processFromDatabase(result)
 
           // Mark as not new
           instance.$isNew = false

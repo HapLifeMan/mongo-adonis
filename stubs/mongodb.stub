@@ -13,7 +13,7 @@ export default defineConfig({
       connectionString: env.get('MONGODB_CONNECTION_STRING'),
       connection: {
         host: env.get('MONGODB_HOST'),
-        port: Number(env.get('MONGODB_PORT')),
+        port: env.get('MONGODB_PORT'),
         user: env.get('MONGODB_USER'),
         password: env.get('MONGODB_PASSWORD'),
         database: env.get('MONGODB_DATABASE'),

@@ -54,13 +54,13 @@ export async function configure(command: Configure) {
     leadingComment: 'App environment variables',
     variables: {
       MONGODB_CONNECTION: 'Env.schema.string()',
-      MONGODB_CONNECTION_STRING: 'Env.schema.optional(Env.schema.string())',
-      MONGODB_HOST: 'Env.schema.string()',
+      MONGODB_CONNECTION_STRING: 'Env.schema.string.optional()',
+      MONGODB_HOST: 'Env.schema.string({ format: "host" })',
       MONGODB_PORT: 'Env.schema.number()',
-      MONGODB_USER: 'Env.schema.optional(Env.schema.string())',
-      MONGODB_PASSWORD: 'Env.schema.optional(Env.schema.string())',
+      MONGODB_USER: 'Env.schema.string.optional()',
+      MONGODB_PASSWORD: 'Env.schema.string.optional()',
       MONGODB_DATABASE: 'Env.schema.string()',
-      MONGODB_AUTH_SOURCE: 'Env.schema.optional(Env.schema.string())',
+      MONGODB_AUTH_SOURCE: 'Env.schema.string.optional()',
     }
   })
 

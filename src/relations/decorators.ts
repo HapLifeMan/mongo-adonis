@@ -10,6 +10,7 @@
 import { HasOne } from './has_one.js'
 import { HasMany } from './has_many.js'
 import { BelongsTo } from './belongs_to.js'
+import { BelongsToMany } from './belongs_to_many.js'
 import type { MongoModelConstructor } from '../model/base_model.js'
 
 /**
@@ -70,6 +71,39 @@ export function belongsTo(
       get() {
         const model = relatedModel()
         return new BelongsTo(model, this, foreignKey, localKey)
+      },
+    })
+  }
+}
+
+/**
+ * Define a belongsToMany relationship
+ */
+export function belongsToMany(
+  relatedModel: () => MongoModelConstructor,
+  pivotModel: () => MongoModelConstructor,
+  pivotForeignKey?: string,
+  pivotRelatedKey?: string,
+  localKey?: string,
+  relatedKey?: string
+): PropertyDecorator {
+  return function (target: any, property: string | symbol) {
+    /**
+     * Define the relationship getter
+     */
+    Object.defineProperty(target, property, {
+      get() {
+        const related = relatedModel()
+        const pivot = pivotModel()
+        return new BelongsToMany(
+          related,
+          this,
+          pivot,
+          pivotForeignKey,
+          pivotRelatedKey,
+          localKey,
+          relatedKey
+        )
       },
     })
   }

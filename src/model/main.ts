@@ -10,7 +10,7 @@
 export { MongoModel } from './base_model.js'
 export { MongoAdapter } from './adapter.js'
 export { column, computed } from './decorators.js'
-export { hasOne, hasMany, belongsTo } from '../relations/decorators.js'
+export { hasOne, hasMany, belongsTo, belongsToMany } from '../relations/decorators.js'
 export {
   beforeCreate,
   afterCreate,

@@ -13,7 +13,7 @@
  */
 
 import { MongoModel } from '../src/model/base_model.js'
-import { column, hasOne, hasMany, belongsTo, beforeSave, afterSave, beforeCreate, afterCreate, beforeUpdate, afterUpdate, beforeDelete, afterDelete, beforeFind, afterFind } from '../src/model/main.js'
+import { column, hasOne, hasMany, belongsTo, belongsToMany, beforeSave, afterSave, beforeCreate, afterCreate, beforeUpdate, afterUpdate, beforeDelete, afterDelete, beforeFind, afterFind } from '../src/model/main.js'
 import { ObjectId } from 'mongodb'
 
 // Define test models that can be used across test files
@@ -140,6 +140,9 @@ export class Post extends MongoModel {
 
   @hasMany(() => Comment, 'postId')
   declare comments: any
+
+  @belongsToMany(() => Tag, () => PostTag, 'post_id', 'tag_id')
+  declare tags: any
 }
 
 export class Profile extends MongoModel {
@@ -314,8 +317,40 @@ export class Ingredient extends MongoModel {
   declare cocktail: any
 }
 
+export class Tag extends MongoModel {
+  static collection = 'tags'
+
+  @column({ isPrimary: true })
+  declare _id: ObjectId
+
+  @column()
+  declare name: string
+
+  @column()
+  declare slug: string
+
+  @belongsToMany(() => Post, () => PostTag, 'tag_id', 'post_id')
+  declare posts: any
+}
+
+export class PostTag extends MongoModel {
+  static collection = 'post_tags'
+
+  @column({ isPrimary: true })
+  declare _id: ObjectId
+
+  @column()
+  declare post_id: ObjectId
+
+  @column()
+  declare tag_id: ObjectId
+
+  @column()
+  declare createdAt: Date
+}
+
 /**
- * Boot all test models
+ * Boot all models to ensure they are registered
  */
 export function bootModels() {
   User.boot()
@@ -327,6 +362,8 @@ export function bootModels() {
   Cocktail.boot()
   Price.boot()
   Ingredient.boot()
+  Tag.boot()
+  PostTag.boot()
 }
 
 /**
@@ -529,6 +566,49 @@ export async function createTestCocktails() {
 }
 
 /**
+ * Create test tags
+ */
+export async function createTestTags() {
+  return await Tag.createMany([
+    { name: 'Technology', slug: 'technology' },
+    { name: 'Health', slug: 'health' },
+    { name: 'Business', slug: 'business' },
+    { name: 'Lifestyle', slug: 'lifestyle' },
+    { name: 'Science', slug: 'science' }
+  ])
+}
+
+/**
+ * Create test post-tag relationships
+ */
+export async function createTestPostTags(posts: any[], tags: any[]) {
+  const now = new Date()
+
+  // Create relationships between posts and tags
+  const postTags = [
+    // Post 1 has Technology and Science tags
+    { post_id: posts[0]._id, tag_id: tags[0]._id, createdAt: now },
+    { post_id: posts[0]._id, tag_id: tags[4]._id, createdAt: now },
+
+    // Post 2 has Health tag
+    { post_id: posts[1]._id, tag_id: tags[1]._id, createdAt: now },
+
+    // Post 3 has Business and Technology tags
+    { post_id: posts[2]._id, tag_id: tags[2]._id, createdAt: now },
+    { post_id: posts[2]._id, tag_id: tags[0]._id, createdAt: now },
+
+    // Post 4 has Science tag
+    { post_id: posts[3]._id, tag_id: tags[4]._id, createdAt: now },
+
+    // Post 5 has Lifestyle and Health tags
+    { post_id: posts[4]._id, tag_id: tags[3]._id, createdAt: now },
+    { post_id: posts[4]._id, tag_id: tags[1]._id, createdAt: now }
+  ]
+
+  return await PostTag.createMany(postTags)
+}
+
+/**
  * Create all test data
  */
 export async function createAllTestData() {
@@ -543,6 +623,8 @@ export async function createAllTestData() {
   const comments = await createTestComments(posts, users)
   const products = await createTestProducts()
   const cocktails = await createTestCocktails()
+  const tags = await createTestTags()
+  const postTags = await createTestPostTags(posts, tags)
 
   return {
     users,
@@ -551,6 +633,8 @@ export async function createAllTestData() {
     profiles,
     comments,
     products,
-    cocktails
+    cocktails,
+    tags,
+    postTags
   }
 }

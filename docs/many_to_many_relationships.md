@@ -30,8 +30,8 @@ To implement a many-to-many relationship, you need three models:
 ### Example Models:
 
 ```typescript
-import { MongoModel } from 'mongo-lucid'
-import { column, belongsToMany } from 'mongo-lucid'
+import { MongoModel } from 'mongo-adonis'
+import { column, belongsToMany } from 'mongo-adonis'
 import { ObjectId } from 'mongodb'
 
 export class Post extends MongoModel {

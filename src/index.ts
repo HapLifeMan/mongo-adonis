@@ -40,7 +40,7 @@ export { BaseRelation } from './relations/base_relation.js'
 export { HasOne } from './relations/has_one.js'
 export { HasMany } from './relations/has_many.js'
 export { BelongsTo } from './relations/belongs_to.js'
-export { hasOne, hasMany, belongsTo } from './relations/decorators.js'
+export { hasOne, hasMany, belongsTo, belongsToMany } from './relations/decorators.js'
 
 /**
  * Export errors

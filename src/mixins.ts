@@ -105,7 +105,6 @@ export function withAuthFinder(
           throw new Error('Invalid user credentials')
         }
 
-        console.log('user', user, password)
         if (await user.verifyPassword(password)) {
           return user
         }

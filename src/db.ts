@@ -7,7 +7,7 @@
  * file that was distributed with this source code.
  */
 
-import { Collection, Document } from 'mongodb'
+import type { Collection, Document } from 'mongodb'
 import { MongoDatabase } from './connection/database.js'
 
 /**
@@ -19,18 +19,12 @@ export type MongoDBClient = {
 
 // Singleton instance
 let dbInstance: MongoDBClient | null = null
-let cachedConnection: any = null
 
 /**
  * Creates a MongoDB client that allows direct access to collections using dot notation
  * Example: db.users.find({})
  */
 export function createMongoDBClient(database: MongoDatabase, connectionName?: string): MongoDBClient {
-  // Cache connection for performance
-  if (!cachedConnection) {
-    cachedConnection = database.connection(connectionName)
-  }
-
   return new Proxy(
     {},
     {
@@ -40,29 +34,32 @@ export function createMongoDBClient(database: MongoDatabase, connectionName?: st
           return undefined
         }
 
-        // Direct collection access when ready (most common case)
-        if (cachedConnection.isReady) {
-          return cachedConnection.collection(prop.toString())
+        const connection = database.connection(connectionName)
+
+        // Return the collection if the connection is ready
+        if (connection.isReady) {
+          return connection.collection(prop.toString())
         }
 
-        // Only create async proxy if connection not ready (rare case)
-        const collectionName = prop.toString()
+        // If connection is not ready, create a proxy that will wait for the connection to be ready
         return new Proxy(
           {},
           {
             get: (_target, method) => {
-              if (typeof method === 'string' && method in Collection.prototype) {
-                return async (...args: any[]) => {
-                  // Connect if not ready
-                  if (!cachedConnection.isReady) {
-                    await cachedConnection.connect()
-                  }
+              return async (...args: any[]) => {
+                // Connect if not already connected
+                if (!connection.isReady) {
+                  await connection.connect()
+                }
 
-                  const collection = cachedConnection.collection(collectionName)
+                const collection: Collection<Document> = connection.collection(prop.toString())
+
+                if (typeof collection[method as keyof Collection<Document>] === 'function') {
                   return (collection[method as keyof Collection<Document>] as Function).apply(collection, args)
                 }
+
+                return undefined
               }
-              return undefined
             }
           }
         )

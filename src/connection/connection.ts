@@ -109,12 +109,8 @@ export class MongoConnection extends EventEmitter implements MongoConnectionCont
 
       const options = {
         ...(this.config.connection?.options || {}),
-        maxPoolSize: this.config.pool?.max || 100,
-        minPoolSize: this.config.pool?.min || 5,
-        maxIdleTimeMS: 60000,
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
-        heartbeatFrequencyMS: 10000,
+        maxPoolSize: this.config.pool?.max || 10,
+        minPoolSize: this.config.pool?.min || 1,
       }
 
       this.client = new MongoClient(uri, options)

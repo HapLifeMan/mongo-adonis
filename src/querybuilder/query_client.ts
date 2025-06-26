@@ -20,15 +20,21 @@ import type { MongoModel } from '../model/base_model.js'
 export class MongoQueryClient {
   constructor(
     private connection: MongoConnectionContract,
-    private emitter: EventEmitter,
-    private isDebugMode: boolean = false
+    private emitter: EventEmitter
   ) {}
+
+  /**
+   * Returns the collection name with the prefix (if any)
+   */
+  private getCollectionName(collectionName: string): string {
+    return collectionName
+  }
 
   /**
    * Get a collection from the database
    */
-  collection<T extends Document = Document>(name: string): Collection<T> {
-    return this.connection.collection<T>(name)
+  collection<T extends Document = Document>(collectionName: string): Collection<T> {
+    return this.connection.collection<T>(this.getCollectionName(collectionName))
   }
 
   /**
@@ -39,9 +45,7 @@ export class MongoQueryClient {
       this.collection<T>(collectionName),
       collectionName,
       this.connection.name,
-      this.emitter,
-      undefined,
-      this.isDebugMode
+      this.emitter
     )
   }
 
@@ -56,25 +60,21 @@ export class MongoQueryClient {
       const result = await collection.find(query, options).toArray() as T
 
       const duration = process.hrtime(startTime)
-      if (this.isDebugMode) {
-        this.emitter.emit('mongodb:query', {
-          connection: this.connection.name,
-          query,
-          duration,
-        })
-      }
+      this.emitter.emit('mongodb:query', {
+        connection: this.connection.name,
+        query,
+        duration,
+      })
 
       return result
     } catch (error) {
       const duration = process.hrtime(startTime)
-      if (this.isDebugMode) {
-        this.emitter.emit('mongodb:query', {
-          connection: this.connection.name,
-          query,
-          duration,
-          error,
-        })
-      }
+      this.emitter.emit('mongodb:query', {
+        connection: this.connection.name,
+        query,
+        duration,
+        error,
+      })
 
       throw error
     }
@@ -90,25 +90,21 @@ export class MongoQueryClient {
       const result = await this.connection.db.command(command) as T
 
       const duration = process.hrtime(startTime)
-      if (this.isDebugMode) {
-        this.emitter.emit('mongodb:query', {
-          connection: this.connection.name,
-          query: command,
-          duration,
-        })
-      }
+      this.emitter.emit('mongodb:query', {
+        connection: this.connection.name,
+        query: command,
+        duration,
+      })
 
       return result
     } catch (error) {
       const duration = process.hrtime(startTime)
-      if (this.isDebugMode) {
-        this.emitter.emit('mongodb:query', {
-          connection: this.connection.name,
-          query: command,
-          duration,
-          error,
-        })
-      }
+      this.emitter.emit('mongodb:query', {
+        connection: this.connection.name,
+        query: command,
+        duration,
+        error,
+      })
 
       throw error
     }

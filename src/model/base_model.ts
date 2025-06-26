@@ -29,7 +29,7 @@ export interface MongoModelConstructor {
   connection: string
   query<T extends MongoModel>(this: new () => T): MongoQueryBuilder<T>
   all<T extends MongoModel>(this: new () => T): Promise<T[]>
-  find<T extends MongoModel>(this: new () => T, _id: ObjectId): Promise<T | null>
+  find<T extends MongoModel>(this: new () => T, _id: string | ObjectId): Promise<T | null>
   findBy<T extends MongoModel>(this: new () => T, key: string, value: any): Promise<T | null>
   create<T extends MongoModel>(this: new () => T, data: Partial<T>): Promise<T>
   createMany<T extends MongoModel>(this: new () => T, data: Partial<T>[]): Promise<T[]>
@@ -163,7 +163,7 @@ export class MongoModel extends Macroable {
     return model
   }
 
-  public static async find<T extends MongoModel>(_id: ObjectId): Promise<T | null> {
+    public static async find<T extends MongoModel>(_id: string | ObjectId): Promise<T | null> {
     const query = this.query<T>()
     const constructor = this as unknown as MongoModelConstructor
 
@@ -171,7 +171,10 @@ export class MongoModel extends Macroable {
       await constructor.beforeFind(query)
     }
 
-    const result = await query.where(this.primaryKey, _id).first()
+    // Convert string to ObjectId if needed
+    const objectId = typeof _id === 'string' ? new ObjectId(_id) : _id
+
+    const result = await query.where(this.primaryKey, objectId).first()
     const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
     if (model && typeof constructor.afterFind === 'function') {

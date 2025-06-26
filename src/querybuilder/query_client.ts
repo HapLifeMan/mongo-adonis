@@ -12,6 +12,7 @@ import { EventEmitter } from 'node:events'
 
 import { MongoQueryBuilder } from './query_builder.js'
 import type { MongoConnectionContract } from '../types/database.js'
+import type { MongoModel } from '../model/base_model.js'
 
 /**
  * Query client exposes the API to execute queries against a MongoDB connection
@@ -39,7 +40,7 @@ export class MongoQueryClient {
   /**
    * Create a query builder for a collection
    */
-  query<T extends Document = Document>(collectionName: string): MongoQueryBuilder<T> {
+  query<T extends MongoModel = MongoModel>(collectionName: string): MongoQueryBuilder<T> {
     return new MongoQueryBuilder<T>(
       this.collection<T>(collectionName),
       collectionName,

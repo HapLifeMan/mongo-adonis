@@ -181,7 +181,7 @@ test.group('Model Timestamps', (group) => {
     const originalUpdatedAt = originalModel.updatedAt
 
     // Retrieve the model from database
-    const retrievedModel = await DefaultTimestampModel.find(originalModel._id.toString())
+    const retrievedModel = await DefaultTimestampModel.find(originalModel._id)
 
     // Verify timestamps are preserved
     assert.exists(retrievedModel)
@@ -215,7 +215,7 @@ test.group('Model Timestamps', (group) => {
     )
 
     // Verify it's the same record with unchanged createdAt
-    assert.equal(model2._id.toString(), model1._id.toString())
+    assert.equal(model2._id.equals(model1._id), true)
     assert.deepEqual(model2.createdAt, originalCreatedAt)
 
     // updatedAt should not change for firstOrCreate when finding an existing record
@@ -245,7 +245,7 @@ test.group('Model Timestamps', (group) => {
     )
 
     // Verify it's the same record with unchanged createdAt
-    assert.equal(model2._id.toString(), model1._id.toString())
+    assert.equal(model2._id.equals(model1._id), true)
     assert.deepEqual(model2.createdAt, originalCreatedAt)
 
     // updatedAt should change for updateOrCreate

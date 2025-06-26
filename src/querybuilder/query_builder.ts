@@ -7,15 +7,16 @@
  * file that was distributed with this source code.
  */
 
-import type { Collection, Document, Filter, Sort, UpdateFilter } from 'mongodb'
+import type { Collection, Filter, Sort, UpdateFilter } from 'mongodb'
 import { EventEmitter } from 'node:events'
 import { MongoModel } from '../model/base_model.js'
+import { ObjectId } from 'mongodb'
 
 /**
  * MongoDB query builder class provides a fluent API to build
  * MongoDB queries.
  */
-export class MongoQueryBuilder<Model extends Document = Document> {
+export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
   /**
    * Filter for the query
    */
@@ -47,7 +48,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
   private modelConstructor?: typeof MongoModel
 
   constructor(
-    private collection: Collection<Model>,
+    private collection: Collection<any>,
     private collectionName: string,
     private connectionName: string,
     private emitter: EventEmitter,
@@ -230,7 +231,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
    * Add a whereNotIn clause to the query
    */
   whereNotIn(key: string, values: any[]): this {
-    return this.where(key, 'notIn', values)
+    return this.where(key, 'not in', values)
   }
 
   /**
@@ -244,7 +245,8 @@ export class MongoQueryBuilder<Model extends Document = Document> {
    * Add a whereExists clause to the query
    */
   whereExists(key: string, exists: boolean = true): this {
-    return this.where(key, 'exists', exists)
+    this.filter[key] = { $exists: exists }
+    return this
   }
 
   /**
@@ -408,7 +410,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
       // If we have a model constructor, instantiate model instances
       if (this.modelConstructor) {
         return results.map(result => {
-          const instance = new this.modelConstructor!() as any
+          const instance = new this.modelConstructor!()
 
           // Use processFromDatabase to apply consume transformations
           instance.processFromDatabase(result)
@@ -421,11 +423,11 @@ export class MongoQueryBuilder<Model extends Document = Document> {
             instance.$primaryKeyValue = result._id
           }
 
-          // Set the original attributes
-          instance.$original = { ...result }
+          // Set the original attributes to the model's processed data
+          instance.$original = { ...instance.toObject() }
 
           return instance
-        }) as unknown as Model[]
+        }) as Model[]
       }
 
       return results as unknown as Model[]
@@ -455,7 +457,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
     const startTime = process.hrtime()
 
     try {
-      const result = await this.collection.updateMany(this.filter, data)
+      const result = await this.collection.updateMany(this.filter, data as any)
 
       const duration = process.hrtime(startTime)
       this.emitter.emit('mongodb:query', {
@@ -511,7 +513,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
   /**
    * Execute the query and insert a document
    */
-  async insert(data: Model): Promise<string> {
+  async insert(data: Model): Promise<ObjectId> {
     const startTime = process.hrtime()
 
     try {
@@ -524,7 +526,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
         duration,
       })
 
-      return result.insertedId.toString()
+      return result.insertedId
     } catch (error) {
       const duration = process.hrtime(startTime)
       this.emitter.emit('mongodb:query', {
@@ -541,7 +543,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
   /**
    * Execute the query and insert multiple documents
    */
-  async insertMany(data: Model[]): Promise<string[]> {
+  async insertMany(data: Model[]): Promise<ObjectId[]> {
     const startTime = process.hrtime()
 
     try {
@@ -554,7 +556,7 @@ export class MongoQueryBuilder<Model extends Document = Document> {
         duration,
       })
 
-      return Object.values(result.insertedIds).map((id) => id.toString())
+      return Object.values(result.insertedIds)
     } catch (error) {
       const duration = process.hrtime(startTime)
       this.emitter.emit('mongodb:query', {

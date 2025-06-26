@@ -54,17 +54,17 @@ test.group('Cocktail Lifecycle Hooks', (group) => {
     assert.equal(cocktail.name, 'Mai Tai')
 
     // Verify that a price was automatically created via the afterCreate hook
-    const price = await cocktail.price.exec()
+    const price = await Price.findBy('cocktailId', cocktail._id)
     assert.exists(price)
-    assert.isNumber(price.amount)
-    assert.equal(price.currency, 'USD')
-    assert.equal(price.cocktailId.toString(), cocktail._id.toString())
+    assert.isNumber(price!.amount)
+    assert.equal(price!.currency, 'USD')
+    assert.equal(price!.cocktailId.equals(cocktail._id), true)
 
     // Verify that the price was created using the relationship method
     // This tests that the hook is using cocktail.price.create() instead of Price.create()
     const allPrices = await Price.all()
     assert.lengthOf(allPrices, 1)
-    assert.equal(allPrices[0].cocktailId.toString(), cocktail._id.toString())
+    assert.equal(allPrices[0].cocktailId.equals(cocktail._id), true)
   })
 
   test('beforeDelete hook deletes related price and ingredients', async ({ assert }) => {
@@ -90,7 +90,7 @@ test.group('Cocktail Lifecycle Hooks', (group) => {
     assert.lengthOf(ingredients, 4)
 
     // Verify the price was created
-    const price = await cocktail.price.exec()
+    const price = await Price.findBy('cocktailId', cocktail._id)
     assert.exists(price)
 
     // Count all ingredients and prices before deletion
@@ -136,11 +136,11 @@ test.group('Cocktail Lifecycle Hooks', (group) => {
 
     // Verify that prices were automatically created for each cocktail
     for (const cocktail of cocktails) {
-      const price = await cocktail.price.exec()
+      const price = await Price.findBy('cocktailId', cocktail._id)
       assert.exists(price)
-      assert.isNumber(price.amount)
-      assert.equal(price.currency, 'USD')
-      assert.equal(price.cocktailId.toString(), cocktail._id.toString())
+      assert.isNumber(price!.amount)
+      assert.equal(price!.currency, 'USD')
+      assert.equal(price!.cocktailId.equals(cocktail._id), true)
     }
 
     // Verify the total number of prices

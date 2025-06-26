@@ -95,11 +95,9 @@ test.group('User Model Hooks', (group) => {
 
     await user.save()
 
-    const userId = user._id.toString()
-
     // Since we can't directly access the query context, we'll just verify
     // that we can find the user without errors, which means the hook ran
-    const foundUser = await User.find(userId)
+    const foundUser = await User.find(user._id)
 
     assert.isNotNull(foundUser)
     assert.equal(foundUser?.name, 'Alice Brown')
@@ -113,9 +111,7 @@ test.group('User Model Hooks', (group) => {
 
     await user.save()
 
-    const userId = user._id.toString()
-
-    const foundUser = await User.find(userId)
+    const foundUser = await User.find(user._id)
 
     assert.isTrue(foundUser?.afterFindTriggered)
   })

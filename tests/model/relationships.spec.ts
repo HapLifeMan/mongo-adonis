@@ -16,11 +16,12 @@ import {
   Comment,
   Category,
 } from '../fixtures.js'
+import { ObjectId } from 'mongodb'
 
 test.group('MongoModel Relationships', (group) => {
   let db: any
-  let userId: string
-  let postId: string
+  let userId: ObjectId
+  let postId: ObjectId
 
   group.setup(async () => {
     // Setup test environment
@@ -75,8 +76,8 @@ test.group('MongoModel Relationships', (group) => {
     ])
 
     // Store IDs for testing
-    userId = users[0]._id.toString()
-    postId = posts[0]._id.toString()
+    userId = users[0]._id
+    postId = posts[0]._id
   })
 
   group.teardown(async () => {
@@ -99,7 +100,7 @@ test.group('MongoModel Relationships', (group) => {
 
     const posts = await user!.posts.exec()
     assert.isTrue(posts.length > 0)
-    assert.isTrue(posts.every((post: Post) => post.userId.toString() === userId))
+    assert.isTrue(posts.every((post: Post) => post.userId.equals(userId)))
   })
 
   test('can fetch many-to-one relationship using decorator', async ({ assert }) => {
@@ -139,7 +140,7 @@ test.group('MongoModel Relationships', (group) => {
 
     assert.exists(newPost)
     assert.equal(newPost.title, 'Advanced MongoDB Techniques')
-    assert.equal(newPost.userId.toString(), userId)
+    assert.equal(newPost.userId.equals(userId), true)
 
     const posts = await user!.posts.exec()
     assert.equal(posts.length, initialCount + 1)

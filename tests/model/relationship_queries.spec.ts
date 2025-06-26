@@ -19,11 +19,12 @@ import {
   Comment,
   createAllTestData
 } from '../fixtures.js'
+import { ObjectId } from 'mongodb'
 
 test.group('Relationship Queries', (group) => {
   let db: any
   let testData: any
-  let userId: string
+  let userId: ObjectId
 
   group.setup(async () => {
     const setup = await setupTest()
@@ -33,7 +34,7 @@ test.group('Relationship Queries', (group) => {
     testData = await createAllTestData()
 
     // Store IDs for testing
-    userId = testData.users[0]._id.toString()
+    userId = testData.users[0]._id
   })
 
   group.teardown(async () => {
@@ -83,8 +84,8 @@ test.group('Relationship Queries', (group) => {
     assert.equal(newPosts[1].title, 'New Post 2')
 
     // Verify the posts were created with the correct relationship
-    assert.equal(newPosts[0].userId.toString(), userId)
-    assert.equal(newPosts[1].userId.toString(), userId)
+    assert.equal(newPosts[0].userId.equals(userId), true)
+    assert.equal(newPosts[1].userId.equals(userId), true)
 
     // Verify the total count of posts
     const allPosts = await user!.posts.exec()
@@ -127,8 +128,8 @@ test.group('Relationship Queries', (group) => {
     assert.isTrue(posts.some((p: Post) => p.title === 'Jane Post 2'))
 
     // Verify the foreign keys were updated
-    assert.equal(post1.userId.toString(), newUser.$primaryKeyValue!.toString())
-    assert.equal(post2.userId.toString(), newUser.$primaryKeyValue!.toString())
+    assert.equal(post1.userId.equals(newUser.$primaryKeyValue!), true)
+    assert.equal(post2.userId.equals(newUser.$primaryKeyValue!), true)
   })
 
   test('can save multiple related records with saveMany', async ({ assert }) => {
@@ -153,8 +154,8 @@ test.group('Relationship Queries', (group) => {
     const refreshedPosts = await user!.posts.exec()
 
     // Find the updated posts
-    const updatedPost1 = refreshedPosts.find((p: Post) => p.$primaryKeyValue!.toString() === posts[0].$primaryKeyValue!.toString())
-    const updatedPost2 = refreshedPosts.find((p: Post) => p.$primaryKeyValue!.toString() === posts[1].$primaryKeyValue!.toString())
+    const updatedPost1 = refreshedPosts.find((p: Post) => p.$primaryKeyValue!.equals(posts[0].$primaryKeyValue!))
+    const updatedPost2 = refreshedPosts.find((p: Post) => p.$primaryKeyValue!.equals(posts[1].$primaryKeyValue!))
 
     // Verify the views were updated
     assert.exists(updatedPost1)

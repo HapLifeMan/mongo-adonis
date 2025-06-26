@@ -142,7 +142,7 @@ test.group('Column Transformers', (group) => {
       .insertOne(rawData)
 
     // Load the user with the model
-    const user = await User.find(result.insertedId.toString())
+    const user = await User.find(result.insertedId)
 
     // Verify transformations were applied
     assert.equal(user?.username, 'testuser')

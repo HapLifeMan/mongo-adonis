@@ -46,7 +46,7 @@ test.group('MongoModel Basic Queries', (group) => {
 
   test('can find a document by id', async ({ assert }) => {
     const createdUser = await User.create({ name: 'Alice Johnson', email: 'alice@example.com', age: 25 })
-    const foundUser = await User.find(createdUser.$primaryKeyValue!.toString())
+    const foundUser = await User.find(createdUser._id)
 
     assert.exists(foundUser)
     assert.equal(foundUser!.name, 'Alice Johnson')
@@ -84,7 +84,7 @@ test.group('MongoModel Basic Queries', (group) => {
     user.age = 34
     await user.save()
 
-    const updatedUser = await User.find(user.$primaryKeyValue!.toString())
+    const updatedUser = await User.find(user._id)
 
     assert.equal(updatedUser!.name, 'David Miller Jr.')
     assert.equal(updatedUser!.age, 34)
@@ -95,7 +95,7 @@ test.group('MongoModel Basic Queries', (group) => {
     const user = await User.create({ name: 'Eve Wilson', email: 'eve@example.com', age: 27 })
     await user.delete()
 
-    const foundUser = await User.find(user.$primaryKeyValue!.toString())
+    const foundUser = await User.find(user._id)
     assert.isNull(foundUser)
   })
 

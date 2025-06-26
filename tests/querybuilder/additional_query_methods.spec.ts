@@ -14,6 +14,7 @@
 import { test } from '@japa/runner'
 import { setupTest, teardownTest } from '../helpers.js'
 import { Product, createTestProducts } from '../fixtures.js'
+import { ObjectId } from 'mongodb'
 
 test.group('MongoQueryBuilder Additional Methods', (group) => {
   let db: any
@@ -132,7 +133,7 @@ test.group('MongoQueryBuilder Additional Methods', (group) => {
     assert.equal(updateCount, 1)
 
     // Fetch the updated product
-    const updatedProduct = await Product.find(testProduct.$primaryKeyValue!.toString())
+    const updatedProduct = await Product.find(testProduct._id)
 
     // Verify the product was updated
     assert.exists(updatedProduct)
@@ -182,14 +183,14 @@ test.group('MongoQueryBuilder Additional Methods', (group) => {
       tags: ['kitchen', 'electric'],
       description: 'Heats food quickly',
       rating: 4.0
-    } as any) // Use type assertion to fix the linter error
+    } as any) // Cast to any to fix type error
 
     // Verify the insertion
     const countAfter = await Product.query().count()
     assert.equal(countAfter, countBefore + 1)
 
     // Verify the inserted product
-    const newProduct = await Product.find(newProductId)
+    const newProduct = await Product.find(newProductId as unknown as ObjectId)
     assert.exists(newProduct)
     assert.equal(newProduct!.name, 'Microwave')
   })

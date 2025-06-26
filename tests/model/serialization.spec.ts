@@ -177,7 +177,7 @@ test.group('Model Serialization', (group) => {
     })
 
     // Get it back from the database
-    const retrieved = await SerializationModel.find(model._id.toString())
+    const retrieved = await SerializationModel.find(model._id)
 
     // Serialize the retrieved model
     const serialized = retrieved!.serialize()
@@ -286,7 +286,7 @@ test.group('Model Serialization', (group) => {
     assert.equal(newModelSerialized.custom_password, 'secret123')
 
     // After fetching from database
-    const fetched = await SerializationModel.find(model._id.toString())
+    const fetched = await SerializationModel.find(model._id)
     const fetchedSerialized = fetched!.toJSON()
 
     // The serialized version should maintain the custom name and have the hashed password since that's what's stored
@@ -307,7 +307,7 @@ test.group('Model Serialization', (group) => {
     assert.equal(fromDb.transformedField, 'transformed value')
 
     // When fetching through the model, consume transformation should be applied
-    const fetched = await SerializationModel.find(model._id.toString())
+    const fetched = await SerializationModel.find(model._id)
     assert.equal(fetched!.transformedField, 'transformed value')
 
     // When using query().first(), consume transformation should also be applied now

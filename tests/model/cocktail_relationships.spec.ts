@@ -58,7 +58,7 @@ test.group('Cocktail Relationships and Hooks', (group) => {
     assert.exists(price)
     assert.isNumber(price.amount)
     assert.equal(price.currency, 'USD')
-    assert.equal(price.cocktailId.toString(), cocktail._id.toString())
+    assert.equal(price.cocktailId.equals(cocktail._id), true)
   })
 
   test('can create ingredients for a cocktail', async ({ assert }) => {
@@ -90,7 +90,7 @@ test.group('Cocktail Relationships and Hooks', (group) => {
 
     // Verify each ingredient has the correct cocktailId
     for (const ingredient of cocktailIngredients) {
-      assert.equal(ingredient.cocktailId.toString(), cocktail._id.toString())
+      assert.equal(ingredient.cocktailId.equals(cocktail._id), true)
     }
   })
 
@@ -194,5 +194,37 @@ test.group('Cocktail Relationships and Hooks', (group) => {
     const updatedPrice = await cocktail.price.exec()
     assert.equal(updatedPrice.amount, 12.50)
     assert.equal(updatedPrice.currency, 'EUR')
+  })
+
+  test('can retrieve a cocktail with its ingredients', async ({ assert }) => {
+    // Create a new cocktail
+    const cocktail = await Cocktail.create({
+      name: 'Moscow Mule',
+      description: 'A cocktail made with vodka, spicy ginger beer, and lime juice',
+      instructions: 'Combine vodka and lime juice in a copper mug filled with ice. Top with ginger beer.',
+      glassType: 'Copper Mug',
+      imageUrl: 'https://example.com/moscow-mule.jpg'
+    })
+
+    // Create ingredients for the cocktail
+    await cocktail.ingredients.createMany([
+      { name: 'Vodka', quantity: '2', unit: 'oz' },
+      { name: 'Ginger Beer', quantity: '4', unit: 'oz' },
+      { name: 'Fresh Lime Juice', quantity: '0.5', unit: 'oz' }
+    ])
+
+    // Retrieve the cocktail with its ingredients
+    const retrievedCocktail = await Cocktail.find(cocktail._id)
+    assert.exists(retrievedCocktail)
+
+    // Load the ingredients
+    const ingredients = await retrievedCocktail!.ingredients.exec()
+
+    // Verify the ingredients are correctly associated with the cocktail
+    const firstIngredient = ingredients[0]
+    assert.equal(firstIngredient.name, 'Vodka')
+    assert.equal(firstIngredient.quantity, '2')
+    assert.equal(firstIngredient.unit, 'oz')
+    assert.equal(firstIngredient.cocktailId.equals(cocktail._id), true)
   })
 })

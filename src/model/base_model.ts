@@ -27,15 +27,15 @@ export interface MongoModelConstructor {
   primaryKey: string
   collection: string
   connection: string
-  query<T extends MongoModel>(): MongoQueryBuilder<T>
-  all<T extends MongoModel>(): Promise<T[]>
-  find<T extends MongoModel>(id: string): Promise<T | null>
-  findBy<T extends MongoModel>(key: string, value: any): Promise<T | null>
-  create<T extends MongoModel>(data: Partial<T>): Promise<T>
-  createMany<T extends MongoModel>(data: Partial<T>[]): Promise<T[]>
-  updateOrCreate<T extends MongoModel>(search: Partial<T>, data: Partial<T>): Promise<T>
-  firstOrCreate<T extends MongoModel>(search: Partial<T>, data?: Partial<T>): Promise<T>
-  firstOrNew<T extends MongoModel>(search: Partial<T>, data?: Partial<T>): Promise<T>
+  query<T extends MongoModel>(this: new () => T): MongoQueryBuilder<T>
+  all<T extends MongoModel>(this: new () => T): Promise<T[]>
+  find<T extends MongoModel>(this: new () => T, _id: ObjectId): Promise<T | null>
+  findBy<T extends MongoModel>(this: new () => T, key: string, value: any): Promise<T | null>
+  create<T extends MongoModel>(this: new () => T, data: Partial<T>): Promise<T>
+  createMany<T extends MongoModel>(this: new () => T, data: Partial<T>[]): Promise<T[]>
+  updateOrCreate<T extends MongoModel>(this: new () => T, search: Partial<T>, data: Partial<T>): Promise<T>
+  firstOrCreate<T extends MongoModel>(this: new () => T, search: Partial<T>, data?: Partial<T>): Promise<T>
+  firstOrNew<T extends MongoModel>(this: new () => T, search: Partial<T>, data?: Partial<T>): Promise<T>
   truncate(): Promise<void>
 
   // Lifecycle hooks
@@ -73,7 +73,7 @@ export class MongoModel extends Macroable {
   /**
    * Instance properties
    */
-  public $primaryKeyValue?: string | ObjectId
+  public $primaryKeyValue?: ObjectId
   public $isNew: boolean = true
   public $original: Record<string, any> = {}
   public $attributes: Record<string, any> = {}
@@ -136,7 +136,7 @@ export class MongoModel extends Macroable {
   }
 
   public static async all<T extends MongoModel>(): Promise<T[]> {
-    return this.query<T>().all() as Promise<T[]>
+    return this.query<T>().all()
   }
 
   /**
@@ -163,7 +163,7 @@ export class MongoModel extends Macroable {
     return model
   }
 
-  public static async find<T extends MongoModel>(id: string): Promise<T | null> {
+  public static async find<T extends MongoModel>(_id: ObjectId): Promise<T | null> {
     const query = this.query<T>()
     const constructor = this as unknown as MongoModelConstructor
 
@@ -171,8 +171,8 @@ export class MongoModel extends Macroable {
       await constructor.beforeFind(query)
     }
 
-    const result = await query.where(this.primaryKey, new ObjectId(id)).first() as Record<string, any> | null
-    const model = this.createModelFromResult<T>(result)
+    const result = await query.where(this.primaryKey, _id).first()
+    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
     if (model && typeof constructor.afterFind === 'function') {
       await constructor.afterFind(model)
@@ -189,8 +189,8 @@ export class MongoModel extends Macroable {
       await constructor.beforeFind(query)
     }
 
-    const result = await query.where(key, value).first() as Record<string, any> | null
-    const model = this.createModelFromResult<T>(result)
+    const result = await query.where(key, value).first()
+    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
     if (model && typeof constructor.afterFind === 'function') {
       await constructor.afterFind(model)
@@ -223,7 +223,7 @@ export class MongoModel extends Macroable {
   ): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const model = await query.first() as T | null
+    const model = await query.first()
 
     if (model) {
       Object.assign(model, data)
@@ -240,8 +240,8 @@ export class MongoModel extends Macroable {
   ): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const result = await query.first() as Record<string, any> | null
-    const model = this.createModelFromResult<T>(result)
+    const result = await query.first()
+    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
     if (model) {
       return model
@@ -256,8 +256,8 @@ export class MongoModel extends Macroable {
   ): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const result = await query.first() as Record<string, any> | null
-    const model = this.createModelFromResult<T>(result)
+    const result = await query.first()
+    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
     if (model) {
       return model
@@ -325,6 +325,9 @@ export class MongoModel extends Macroable {
       const id = await query.insert(attributes as any)
       this.$primaryKeyValue = id
       this.$isNew = false
+
+      // Refresh to get the actual saved data
+      await this.refresh()
     } else {
       if (!this.$primaryKeyValue) {
         throw new errors.ModelPrimaryKeyMissingException(
@@ -335,11 +338,10 @@ export class MongoModel extends Macroable {
       await query
         .where(this.$primaryKey, this.$primaryKeyValue)
         .update({ $set: attributes })
-    }
 
-    await this.refresh().catch(() => {
-      // If refresh fails, just continue
-    })
+      // Refresh to get the updated data
+      await this.refresh()
+    }
 
     if (typeof Constructor.afterSave === 'function') {
       await Constructor.afterSave(this)
@@ -354,8 +356,6 @@ export class MongoModel extends Macroable {
         await Constructor.afterUpdate(this)
       }
     }
-
-    this.$original = { ...this.toObject() }
 
     return this
   }
@@ -390,16 +390,18 @@ export class MongoModel extends Macroable {
     }
 
     const Constructor = this.$constructor
-    const model = await Constructor.find(this.$primaryKeyValue.toString())
+    const result = await Constructor.query()
+      .where(this.$primaryKey, this.$primaryKeyValue)
+      .first()
 
-    if (!model) {
+    if (!result) {
       this.$isNew = true
       this.$primaryKeyValue = undefined
       return this
     }
 
-    // Process the data with consume transformations
-    this.processFromDatabase(model)
+    // Process the fresh data from database
+    this.processFromDatabase(result as Record<string, any>)
     this.$original = { ...this.toObject() }
 
     return this

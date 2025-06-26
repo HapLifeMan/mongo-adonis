@@ -67,6 +67,12 @@ export abstract class BaseRelation {
    * Get the local key value
    */
   getLocalKeyValue(): any {
+    // If the local key is the primary key, use $primaryKeyValue
+    if (this.localKey === this.ownerModel.$primaryKey) {
+      return this.ownerModel.$primaryKeyValue
+    }
+
+    // Otherwise, try to get the property value directly
     return this.ownerModel[this.localKey]
   }
 

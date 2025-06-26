@@ -47,14 +47,21 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
    */
   private modelConstructor?: typeof MongoModel
 
+  /**
+   * Debug flag to control event emission
+   */
+  private isDebugMode: boolean = false
+
   constructor(
     private collection: Collection<any>,
     private collectionName: string,
     private connectionName: string,
     private emitter: EventEmitter,
-    modelConstructor?: typeof MongoModel
+    modelConstructor?: typeof MongoModel,
+    isDebugMode: boolean = false
   ) {
     this.modelConstructor = modelConstructor
+    this.isDebugMode = isDebugMode
   }
 
   /**
@@ -66,7 +73,8 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       this.collectionName,
       this.connectionName,
       this.emitter,
-      this.modelConstructor
+      this.modelConstructor,
+      this.isDebugMode
     )
 
     clone.filter = { ...this.filter }
@@ -347,21 +355,25 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const count = await this.collection.countDocuments(this.filter)
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { count: true, filter: this.filter },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { count: true, filter: this.filter },
+          duration,
+        })
+      }
 
       return count
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { count: true, filter: this.filter },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { count: true, filter: this.filter },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }
@@ -395,17 +407,19 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const results = await query.toArray()
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: {
-          filter: this.filter,
-          projection: this.projection,
-          sort: this.sortOptions,
-          limit: this.limitValue,
-          skip: this.skipValue,
-        },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: {
+            filter: this.filter,
+            projection: this.projection,
+            sort: this.sortOptions,
+            limit: this.limitValue,
+            skip: this.skipValue,
+          },
+          duration,
+        })
+      }
 
       // If we have a model constructor, instantiate model instances
       if (this.modelConstructor) {
@@ -433,18 +447,20 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       return results as unknown as Model[]
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: {
-          filter: this.filter,
-          projection: this.projection,
-          sort: this.sortOptions,
-          limit: this.limitValue,
-          skip: this.skipValue,
-        },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: {
+            filter: this.filter,
+            projection: this.projection,
+            sort: this.sortOptions,
+            limit: this.limitValue,
+            skip: this.skipValue,
+          },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }
@@ -460,21 +476,25 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const result = await this.collection.updateMany(this.filter, data as any)
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { update: true, filter: this.filter, data },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { update: true, filter: this.filter, data },
+          duration,
+        })
+      }
 
       return result.modifiedCount
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { update: true, filter: this.filter, data },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { update: true, filter: this.filter, data },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }
@@ -490,21 +510,25 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const result = await this.collection.deleteMany(this.filter)
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { delete: true, filter: this.filter },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { delete: true, filter: this.filter },
+          duration,
+        })
+      }
 
       return result.deletedCount || 0
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { delete: true, filter: this.filter },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { delete: true, filter: this.filter },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }
@@ -520,21 +544,25 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const result = await this.collection.insertOne(data as any)
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { insert: true, data },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { insert: true, data },
+          duration,
+        })
+      }
 
       return result.insertedId
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { insert: true, data },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { insert: true, data },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }
@@ -550,21 +578,25 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const result = await this.collection.insertMany(data as any)
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { insertMany: true, data },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { insertMany: true, data },
+          duration,
+        })
+      }
 
       return Object.values(result.insertedIds)
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: { insertMany: true, data },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: { insertMany: true, data },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }
@@ -630,27 +662,31 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
       const results = await this.collection.aggregate(processedPipeline).toArray()
 
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: {
-          aggregate: true,
-          pipeline: processedPipeline
-        },
-        duration,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: {
+            aggregate: true,
+            pipeline: processedPipeline
+          },
+          duration,
+        })
+      }
 
       return results as T[]
     } catch (error) {
       const duration = process.hrtime(startTime)
-      this.emitter.emit('mongodb:query', {
-        connection: this.connectionName,
-        query: {
-          aggregate: true,
-          pipeline: pipeline.filter(Boolean)
-        },
-        duration,
-        error,
-      })
+      if (this.isDebugMode) {
+        this.emitter.emit('mongodb:query', {
+          connection: this.connectionName,
+          query: {
+            aggregate: true,
+            pipeline: pipeline.filter(Boolean)
+          },
+          duration,
+          error,
+        })
+      }
 
       throw error
     }

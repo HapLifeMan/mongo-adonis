@@ -26,12 +26,17 @@ export class MongoAdapter {
     const connection = this.db.connection(modelConstructor.connection)
     const queryClient = connection.collection(modelConstructor.collection)
 
+    // Get debug flag from connection config
+    const connectionNode = this.db.manager.getConnectionNode(modelConstructor.connection || this.db.config.connection)
+    const isDebugMode = connectionNode?.config.debug || false
+
     const queryBuilder = new MongoQueryBuilder(
       queryClient,
       modelConstructor.collection,
       connection.name,
       this.db.emitter,
-      modelConstructor as any
+      modelConstructor as any,
+      isDebugMode
     )
 
     return {

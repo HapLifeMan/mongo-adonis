@@ -77,7 +77,14 @@ export default class MongoDBServiceProvider {
 
     this.app.container.singleton(MongoQueryClient, async (resolver) => {
       const db = await resolver.make('lucid.mongodb')
-      return db.connection() as unknown as MongoQueryClient
+      const connection = db.connection()
+
+      // Get debug flag from the default connection config
+      const defaultConnectionName = db.config.connection
+      const connectionNode = db.manager.getConnectionNode(defaultConnectionName)
+      const isDebugMode = connectionNode?.config.debug || false
+
+      return new MongoQueryClient(connection, db.emitter, isDebugMode)
     })
 
     this.app.container.alias('lucid.mongodb', MongoDatabase)

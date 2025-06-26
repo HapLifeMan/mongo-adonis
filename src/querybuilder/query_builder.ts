@@ -279,20 +279,36 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
   orWhere(key: string, value: any): this
   orWhere(key: string, operator: string, value: any): this
   orWhere(key: string, operatorOrValue: any, value?: any): this {
-    const orBuilder = this.clone()
-    orBuilder.filter = {}
+    // Create the new condition
+    const newCondition: Record<string, any> = {}
 
     if (value === undefined) {
-      orBuilder.filter[key] = operatorOrValue
+      newCondition[key] = operatorOrValue
     } else {
-      orBuilder.where(key, operatorOrValue, value)
+      // Use a temporary builder to construct the condition with operators
+      const tempBuilder = this.clone()
+      tempBuilder.filter = {}
+      tempBuilder.where(key, operatorOrValue, value)
+      Object.assign(newCondition, tempBuilder.filter)
     }
 
+    // If this is the first orWhere call and there are existing filters
     if (!this.filter.$or) {
-      this.filter.$or = []
+      if (Object.keys(this.filter).length > 0) {
+        // Convert existing filters to $or structure
+        const existingConditions = { ...this.filter }
+        this.filter = {
+          $or: [existingConditions, newCondition]
+        }
+      } else {
+        // No existing conditions, just add the new condition normally
+        Object.assign(this.filter, newCondition)
+      }
+    } else {
+      // $or already exists, just add the new condition
+      this.filter.$or.push(newCondition)
     }
 
-    this.filter.$or.push(orBuilder.filter)
     return this
   }
 

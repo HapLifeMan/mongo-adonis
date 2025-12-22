@@ -68,7 +68,7 @@ export default class MongoDBServiceProvider {
    */
   register() {
     this.app.container.singleton(MongoDatabase, async (resolver) => {
-      const config = this.app.config.get<MongoDBConfig>('mongodb')
+      const config = this.app.config.get<MongoDBConfig>('database')
       const emitter = await resolver.make('emitter')
       const logger = await resolver.make('logger')
       const db = new MongoDatabase(config, logger, emitter as any)

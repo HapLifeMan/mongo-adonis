@@ -222,7 +222,9 @@ export class MongoModel extends Macroable implements LucidRow {
   }
 
   private static createModelFromResult<T extends MongoModel>(result: Record<string, any> | null): T | null {
-    if (!result) return null
+    if (!result) {
+      return null
+    }
     const model = new this() as T
 
     model.processFromDatabase(result)
@@ -239,25 +241,33 @@ export class MongoModel extends Macroable implements LucidRow {
   public static async find<T extends MongoModel>(_id: string | ObjectId): Promise<T | null> {
     const query = this.query<T>()
     const constructor = this as unknown as MongoModelConstructor
-    if (typeof constructor.beforeFind === 'function') await constructor.beforeFind(query)
+    if (typeof constructor.beforeFind === 'function') {
+      await constructor.beforeFind(query)
+    }
 
     const objectId = typeof _id === 'string' ? new ObjectId(_id) : _id
     const result = await query.where(this.primaryKey, objectId).first()
     const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
-    if (model && typeof constructor.afterFind === 'function') await constructor.afterFind(model)
+    if (model && typeof constructor.afterFind === 'function') {
+      await constructor.afterFind(model)
+    }
     return model
   }
 
   public static async findBy<T extends MongoModel>(key: string, value: any): Promise<T | null> {
     const query = this.query<T>()
     const constructor = this as unknown as MongoModelConstructor
-    if (typeof constructor.beforeFind === 'function') await constructor.beforeFind(query)
+    if (typeof constructor.beforeFind === 'function') {
+      await constructor.beforeFind(query)
+    }
 
     const result = await query.where(key, value).first()
     const model = this.createModelFromResult<T>(result as Record<string, any> | null)
 
-    if (model && typeof constructor.afterFind === 'function') await constructor.afterFind(model)
+    if (model && typeof constructor.afterFind === 'function') {
+      await constructor.afterFind(model)
+    }
     return model
   }
 
@@ -296,7 +306,9 @@ export class MongoModel extends Macroable implements LucidRow {
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
     const result = await query.first()
     const model = this.createModelFromResult<T>(result as Record<string, any> | null)
-    if (model) return model
+    if (model) {
+      return model
+    }
     return this.create<T>({ ...search, ...(data || {}) })
   }
 
@@ -305,7 +317,9 @@ export class MongoModel extends Macroable implements LucidRow {
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
     const result = await query.first()
     const model = this.createModelFromResult<T>(result as Record<string, any> | null)
-    if (model) return model
+    if (model) {
+      return model
+    }
 
     const newModel = new this() as T
     Object.assign(newModel, { ...search, ...(data || {}) })
@@ -335,13 +349,19 @@ export class MongoModel extends Macroable implements LucidRow {
     const Constructor = this.$constructor
     const query = Constructor.query()
 
-    if (typeof Constructor.beforeSave === 'function') await Constructor.beforeSave(this)
+    if (typeof Constructor.beforeSave === 'function') {
+      await Constructor.beforeSave(this)
+    }
 
     const isNew = this.$isNew
     if (isNew) {
-      if (typeof Constructor.beforeCreate === 'function') await Constructor.beforeCreate(this)
+      if (typeof Constructor.beforeCreate === 'function') {
+        await Constructor.beforeCreate(this)
+      }
     } else {
-      if (typeof Constructor.beforeUpdate === 'function') await Constructor.beforeUpdate(this)
+      if (typeof Constructor.beforeUpdate === 'function') {
+        await Constructor.beforeUpdate(this)
+      }
     }
 
     const attributes = this.toObject()
@@ -362,11 +382,17 @@ export class MongoModel extends Macroable implements LucidRow {
       await this.refresh()
     }
 
-    if (typeof Constructor.afterSave === 'function') await Constructor.afterSave(this)
+    if (typeof Constructor.afterSave === 'function') {
+      await Constructor.afterSave(this)
+    }
     if (isNew) {
-      if (typeof Constructor.afterCreate === 'function') await Constructor.afterCreate(this)
+      if (typeof Constructor.afterCreate === 'function') {
+        await Constructor.afterCreate(this)
+      }
     } else {
-      if (typeof Constructor.afterUpdate === 'function') await Constructor.afterUpdate(this)
+      if (typeof Constructor.afterUpdate === 'function') {
+        await Constructor.afterUpdate(this)
+      }
     }
 
     return this
@@ -377,13 +403,17 @@ export class MongoModel extends Macroable implements LucidRow {
       throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when deleting model`)
     }
     const Constructor = this.$constructor
-    if (typeof Constructor.beforeDelete === 'function') await Constructor.beforeDelete(this)
+    if (typeof Constructor.beforeDelete === 'function') {
+      await Constructor.beforeDelete(this)
+    }
 
     await Constructor.query().where(this.$primaryKey, this.$primaryKeyValue).delete()
     this.$isDeleted = true
     this.$isPersisted = false
 
-    if (typeof Constructor.afterDelete === 'function') await Constructor.afterDelete(this)
+    if (typeof Constructor.afterDelete === 'function') {
+      await Constructor.afterDelete(this)
+    }
   }
 
   public async refresh(): Promise<this> {
@@ -445,9 +475,13 @@ export class MongoModel extends Macroable implements LucidRow {
         if (columnsDefinitions && columnsDefinitions.has(key)) {
           const columnDef = columnsDefinitions.get(key)
           if (columnDef.serialize === false) continue
-          if (columnDef.serializeAs === null) continue
-          else if (typeof columnDef.serializeAs === 'string') obj[columnDef.serializeAs] = value
-          else obj[key] = value
+          if (columnDef.serializeAs === null) {
+            continue
+          } else if (typeof columnDef.serializeAs === 'string') {
+            obj[columnDef.serializeAs] = value
+          } else {
+            obj[key] = value
+          }
         } else {
           obj[key] = value
         }
@@ -459,9 +493,13 @@ export class MongoModel extends Macroable implements LucidRow {
         if (def.serialize === false) continue
         try {
           const value = this[key]
-          if (def.serializeAs === null) continue
-          else if (typeof def.serializeAs === 'string') obj[def.serializeAs] = value
-          else obj[key] = value
+          if (def.serializeAs === null) {
+            continue
+          } else if (typeof def.serializeAs === 'string') {
+            obj[def.serializeAs] = value
+          } else {
+            obj[key] = value
+          }
         } catch (error) { }
       }
     }

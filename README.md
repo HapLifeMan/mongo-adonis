@@ -48,14 +48,13 @@ node ace configure mongo-adonis
 ### 3. Fill Environment Variables
 
 ```env
-MONGODB_CONNECTION=mongodb
-MONGODB_CONNECTION_STRING=mongodb://localhost:27017/mongo-adonis
-MONGODB_HOST=127.0.0.1
-MONGODB_PORT=27017
-MONGODB_USER=
-MONGODB_PASSWORD=
-MONGODB_DATABASE=mongo-adonis
-MONGODB_AUTH_SOURCE=admin
+DB_CONNECTION=mongodb
+DB_HOST=127.0.0.1
+DB_PORT=27017
+DB_USER=
+DB_PASSWORD=
+DB_DATABASE=mongo-adonis
+DB_AUTH_SOURCE=admin
 ```
 
 ## 📝 Usage Examples

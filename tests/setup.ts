@@ -11,7 +11,7 @@ import { configure, run } from '@japa/runner'
 import { assert } from '@japa/assert'
 
 console.log('Setting up tests with MongoDB connection...')
-console.log(`Connection to ${process.env.MONGODB_HOST || '127.0.0.1'}:${process.env.MONGODB_PORT || '27017'}/${process.env.MONGODB_DATABASE || 'adonis_test'}...`)
+console.log(`Connection to ${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || '27017'}/${process.env.DB_DATABASE || 'adonis_test'}...`)
 
 // Configure tests
 configure({

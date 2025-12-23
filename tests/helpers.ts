@@ -32,9 +32,9 @@ const config = {
     mongodb: {
       client: 'mongodb' as const,
       connection: {
-        host: process.env.MONGODB_HOST || '127.0.0.1',
-        port: Number(process.env.MONGODB_PORT || 27017),
-        database: process.env.MONGODB_TEST_DATABASE || 'adonis_test',
+        host: process.env.DB_HOST || '127.0.0.1',
+        port: Number(process.env.DB_PORT || 27017),
+        database: process.env.DB_TEST_DATABASE || 'adonis_test',
       },
     },
   },

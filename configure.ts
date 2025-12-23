@@ -37,14 +37,13 @@ export async function configure(command: Configure) {
    * Add environment variables
    */
   await codemods.defineEnvVariables({
-    MONGODB_CONNECTION: 'mongodb',
-    MONGODB_CONNECTION_STRING: 'mongodb://localhost:27017/mongo-adonis',
-    MONGODB_HOST: '127.0.0.1',
-    MONGODB_PORT: '27017',
-    MONGODB_USER: 'admin',
-    MONGODB_PASSWORD: '',
-    MONGODB_DATABASE: 'mongo-adonis',
-    MONGODB_AUTH_SOURCE: 'admin',
+    DB_CONNECTION: 'mongodb',
+    DB_HOST: '127.0.0.1',
+    DB_PORT: '27017',
+    DB_USER: 'admin',
+    DB_PASSWORD: '',
+    DB_DATABASE: 'mongo-adonis',
+    DB_AUTH_SOURCE: 'admin',
   })
 
   /**
@@ -53,14 +52,13 @@ export async function configure(command: Configure) {
   await codemods.defineEnvValidations({
     leadingComment: 'App environment variables',
     variables: {
-      MONGODB_CONNECTION: 'Env.schema.string()',
-      MONGODB_CONNECTION_STRING: 'Env.schema.string.optional()',
-      MONGODB_HOST: 'Env.schema.string({ format: "host" })',
-      MONGODB_PORT: 'Env.schema.number()',
-      MONGODB_USER: 'Env.schema.string.optional()',
-      MONGODB_PASSWORD: 'Env.schema.string.optional()',
-      MONGODB_DATABASE: 'Env.schema.string()',
-      MONGODB_AUTH_SOURCE: 'Env.schema.string.optional()',
+      DB_CONNECTION: 'Env.schema.string()',
+      DB_HOST: 'Env.schema.string({ format: "host" })',
+      DB_PORT: 'Env.schema.number()',
+      DB_USER: 'Env.schema.string.optional()',
+      DB_PASSWORD: 'Env.schema.string.optional()',
+      DB_DATABASE: 'Env.schema.string()',
+      DB_AUTH_SOURCE: 'Env.schema.string.optional()',
     }
   })
 

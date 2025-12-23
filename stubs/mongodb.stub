@@ -6,18 +6,18 @@ import { defineConfig } from 'mongo-adonis'
  * MongoDB configuration
  */
 export default defineConfig({
-  connection: env.get('MONGODB_CONNECTION', 'mongodb'),
+  connection: env.get('DB_CONNECTION', 'mongodb'),
   connections: {
     mongodb: {
       client: 'mongodb',
-      connectionString: env.get('MONGODB_CONNECTION_STRING'),
+      connectionString: env.get('DB_CONNECTION_STRING'),
       connection: {
-        host: env.get('MONGODB_HOST'),
-        port: env.get('MONGODB_PORT'),
-        user: env.get('MONGODB_USER'),
-        password: env.get('MONGODB_PASSWORD'),
-        database: env.get('MONGODB_DATABASE'),
-        authSource: env.get('MONGODB_AUTH_SOURCE', 'admin'),
+        host: env.get('DB_HOST'),
+        port: env.get('DB_PORT'),
+        user: env.get('DB_USER'),
+        password: env.get('DB_PASSWORD'),
+        database: env.get('DB_DATABASE'),
+        authSource: env.get('DB_AUTH_SOURCE', 'admin'),
       },
       healthCheck: true,
       debug: env.get('NODE_ENV') === 'development',

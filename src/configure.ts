@@ -18,12 +18,12 @@ export default defineConfig({
     mongodb: {
       client: 'mongodb',
       connection: {
-        host: process.env.MONGODB_HOST || '127.0.0.1',
-        port: Number(process.env.MONGODB_PORT || 27017),
-        user: process.env.MONGODB_USER,
-        password: process.env.MONGODB_PASSWORD,
-        database: process.env.MONGODB_DATABASE || 'adonis',
-        authSource: process.env.MONGODB_AUTH_SOURCE || 'admin',
+        host: process.env.DB_HOST || '127.0.0.1',
+        port: Number(process.env.DB_PORT || 27017),
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_DATABASE || 'adonis',
+        authSource: process.env.DB_AUTH_SOURCE || 'admin',
       },
     },
   },

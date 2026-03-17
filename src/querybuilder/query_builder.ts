@@ -360,7 +360,10 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
     const startTime = process.hrtime()
 
     try {
-      const count = await this.collection.countDocuments(this.filter)
+      const hasFilter = Object.keys(this.filter).length > 0
+      const count = hasFilter
+        ? await this.collection.countDocuments(this.filter)
+        : await this.collection.estimatedDocumentCount()
 
       const duration = process.hrtime(startTime)
       this.emitter.emit('mongodb:query', {

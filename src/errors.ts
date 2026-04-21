@@ -88,3 +88,16 @@ export class MongoDBException extends Exception {
     super(message, options)
   }
 }
+
+/**
+ * Exception raised when calling a method that has not been implemented yet.
+ * Used for Lucid compatibility stubs that deliberately fail-loud instead of
+ * silently no-opping.
+ */
+export class NotImplementedException extends Exception {
+  static status = 501
+
+  constructor(message: string, options?: { cause?: Error }) {
+    super(message, options)
+  }
+}

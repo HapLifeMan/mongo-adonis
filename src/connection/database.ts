@@ -47,17 +47,21 @@ export class MongoDatabase implements MongoDatabaseContract {
   }
 
   /**
-   * Returns connection for a specific name or the default connection
+   * Returns connection for a specific name or the default connection.
+   *
+   * The returned connection may not be immediately ready — the connect call
+   * is kicked off here but not awaited, so callers must either `await
+   * connection.connect()` explicitly (idempotent) or use the async-proxy
+   * accessors that await on first use.
    */
   connection(name?: string): MongoConnectionContract {
     const connectionName = name || this.defaultConnectionName
     const connection = this.manager.get(connectionName)
 
-    /**
-     * Connect when not already connected
-     */
     if (!this.manager.isConnected(connectionName)) {
-      this.manager.connect(connectionName)
+      this.manager.connect(connectionName).catch((error) => {
+        this.emitter.emit('mongodb:connection:error', [error, connection])
+      })
     }
 
     return connection

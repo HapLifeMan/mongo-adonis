@@ -97,19 +97,40 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
 
     const key = keyOrObject as string;
 
+    const hasOperatorObject = (v: any) =>
+      v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof ObjectId)
+
+    const isOperatorObj = (v: any) =>
+      hasOperatorObject(v) && Object.keys(v).every((k) => k.startsWith('$'))
+
     if (value === undefined) {
-      this.filter[key] = operatorOrValue
+      // Two-arg form: either a raw operator object like `{ $exists: true }`
+      // (merge its operator keys into the existing condition) or a plain
+      // value (equality — merged as `$eq` to avoid silently wiping prior
+      // operators like `{ $gt: … }`).
+      const val = operatorOrValue
+      if (isOperatorObj(val)) {
+        if (hasOperatorObject(this.filter[key])) {
+          Object.assign(this.filter[key], val)
+        } else {
+          this.filter[key] = { ...val }
+        }
+      } else if (hasOperatorObject(this.filter[key])) {
+        this.filter[key].$eq = val
+      } else {
+        this.filter[key] = val
+      }
       return this
     }
 
     const operator = operatorOrValue
 
     // Check if we already have a condition for this key
-    if (this.filter[key] && typeof this.filter[key] === 'object' && !Array.isArray(this.filter[key])) {
+    if (hasOperatorObject(this.filter[key])) {
       // If we do, we need to merge the new condition with the existing one
       switch (operator) {
         case '=':
-          this.filter[key] = value
+          this.filter[key].$eq = value
           break
         case '>':
           this.filter[key].$gt = value
@@ -470,6 +491,59 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
   }
 
   /**
+   * Stream results one document at a time via an async iterator.
+   * Prefer this over `.all()` for large result sets — the cursor is closed
+   * automatically when iteration ends or the caller breaks out.
+   */
+  async *stream(): AsyncGenerator<Model, void, void> {
+    const startTime = process.hrtime()
+    let cursor = this.collection.find(this.filter as Filter<Model>)
+
+    if (Object.keys(this.projection).length > 0) {
+      cursor = cursor.project(this.projection)
+    }
+    if (Object.keys(this.sortOptions).length > 0) {
+      cursor = cursor.sort(this.sortOptions as unknown as Sort)
+    }
+    if (this.limitValue !== null) {
+      cursor = cursor.limit(this.limitValue)
+    }
+    if (this.skipValue !== null) {
+      cursor = cursor.skip(this.skipValue)
+    }
+
+    try {
+      for await (const doc of cursor) {
+        if (this.modelConstructor) {
+          const instance = new this.modelConstructor!()
+          instance.processFromDatabase(doc)
+          instance.$isNew = false
+          if (doc._id) instance.$primaryKeyValue = doc._id
+          instance.$original = { ...instance.toObject() }
+          yield instance as Model
+        } else {
+          yield doc as unknown as Model
+        }
+      }
+    } finally {
+      await cursor.close().catch(() => { /* cursor already closed */ })
+      const duration = process.hrtime(startTime)
+      this.emitter.emit('mongodb:query', {
+        connection: this.connectionName,
+        query: {
+          stream: true,
+          filter: this.filter,
+          projection: this.projection,
+          sort: this.sortOptions,
+          limit: this.limitValue,
+          skip: this.skipValue,
+        },
+        duration,
+      })
+    }
+  }
+
+  /**
    * Execute the query and update documents
    */
   async update(data: UpdateFilter<Model>): Promise<number> {
@@ -590,7 +664,9 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
   }
 
   /**
-   * Execute the query and paginate the results
+   * Execute the query and paginate the results.
+   * Runs the count and the page fetch in parallel — they're independent
+   * round trips and MongoDB happily serves them concurrently over the pool.
    */
   async paginate(page: number = 1, perPage: number = 20): Promise<{
     total: number
@@ -599,17 +675,18 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
     page: number
     data: Model[]
   }> {
-    const total = await this.count()
-    const lastPage = Math.ceil(total / perPage)
-
-    const results = await this.offset((page - 1) * perPage).limit(perPage).exec()
+    const dataQuery = this.clone().offset((page - 1) * perPage).limit(perPage)
+    const [total, data] = await Promise.all([
+      this.count(),
+      dataQuery.exec(),
+    ])
 
     return {
       total,
       perPage,
-      lastPage,
+      lastPage: Math.ceil(total / perPage),
       page,
-      data: results,
+      data,
     }
   }
 

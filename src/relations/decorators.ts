@@ -14,6 +14,34 @@ import { BelongsToMany } from './belongs_to_many.js'
 import type { MongoModelConstructor } from '../model/base_model.js'
 
 /**
+ * Memoize a relation instance per owner model. Decorators used to build a
+ * fresh relation on every property access, which meant `model.posts ===
+ * model.posts` was false and every access allocated. Cache on a hidden,
+ * non-enumerable slot keyed by property name.
+ */
+function memoizedGetter(
+  property: string | symbol,
+  factory: (owner: any) => any
+): (this: any) => any {
+  const slot = typeof property === 'symbol'
+    ? Symbol(`__relation_${property.description}`)
+    : Symbol(`__relation_${property}`)
+
+  return function (this: any) {
+    const existing = this[slot]
+    if (existing) return existing
+    const instance = factory(this)
+    Object.defineProperty(this, slot, {
+      value: instance,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    })
+    return instance
+  }
+}
+
+/**
  * Define a hasOne relationship
  */
 export function hasOne(
@@ -22,14 +50,8 @@ export function hasOne(
   localKey?: string
 ): PropertyDecorator {
   return function (target: any, property: string | symbol) {
-    /**
-     * Define the relationship getter
-     */
     Object.defineProperty(target, property, {
-      get() {
-        const model = relatedModel()
-        return new HasOne(model, this, foreignKey, localKey)
-      },
+      get: memoizedGetter(property, (owner) => new HasOne(relatedModel(), owner, foreignKey, localKey)),
     })
   }
 }
@@ -43,14 +65,8 @@ export function hasMany(
   localKey?: string
 ): PropertyDecorator {
   return function (target: any, property: string | symbol) {
-    /**
-     * Define the relationship getter
-     */
     Object.defineProperty(target, property, {
-      get() {
-        const model = relatedModel()
-        return new HasMany(model, this, foreignKey, localKey)
-      },
+      get: memoizedGetter(property, (owner) => new HasMany(relatedModel(), owner, foreignKey, localKey)),
     })
   }
 }
@@ -64,14 +80,8 @@ export function belongsTo(
   localKey?: string
 ): PropertyDecorator {
   return function (target: any, property: string | symbol) {
-    /**
-     * Define the relationship getter
-     */
     Object.defineProperty(target, property, {
-      get() {
-        const model = relatedModel()
-        return new BelongsTo(model, this, foreignKey, localKey)
-      },
+      get: memoizedGetter(property, (owner) => new BelongsTo(relatedModel(), owner, foreignKey, localKey)),
     })
   }
 }
@@ -88,23 +98,18 @@ export function belongsToMany(
   relatedKey?: string
 ): PropertyDecorator {
   return function (target: any, property: string | symbol) {
-    /**
-     * Define the relationship getter
-     */
     Object.defineProperty(target, property, {
-      get() {
-        const related = relatedModel()
-        const pivot = pivotModel()
-        return new BelongsToMany(
-          related,
-          this,
-          pivot,
+      get: memoizedGetter(property, (owner) =>
+        new BelongsToMany(
+          relatedModel(),
+          owner,
+          pivotModel(),
           pivotForeignKey,
           pivotRelatedKey,
           localKey,
           relatedKey
         )
-      },
+      ),
     })
   }
 }

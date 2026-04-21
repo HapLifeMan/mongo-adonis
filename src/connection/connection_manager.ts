@@ -110,25 +110,20 @@ export class MongoConnectionManager implements MongoConnectionManagerContract {
   }
 
   /**
-   * Connect to the database using config for a given named connection
+   * Connect to the database using config for a given named connection.
+   * Idempotent: concurrent calls resolve to the same underlying handshake.
    */
-  connect(connectionName: string): void {
+  async connect(connectionName: string): Promise<void> {
     const connection = this.connections.get(connectionName)
     if (!connection) {
       throw new errors.ConnectionNotFoundException(`Connection "${connectionName}" is not registered`)
     }
 
-    /**
-     * Ignore when there is already a connection.
-     */
     if (this.isConnected(connection.name)) {
       return
     }
 
-    /**
-     * Connect to the database
-     */
-    connection.connection!.connect()
+    await connection.connection!.connect()
   }
 
   /**

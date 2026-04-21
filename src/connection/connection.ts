@@ -35,6 +35,7 @@ export class MongoConnection extends EventEmitter implements MongoConnectionCont
   public state: 'registered' | 'open' | 'closed' = 'registered'
   private _isReady: boolean = false
   private _isClosed: boolean = false
+  private _connecting: Promise<void> | null = null
 
   constructor(
     public name: string,
@@ -95,22 +96,42 @@ export class MongoConnection extends EventEmitter implements MongoConnectionCont
   }
 
   /**
-   * Connect to the MongoDB server
+   * Connect to the MongoDB server.
+   * Idempotent: concurrent callers share a single in-flight handshake.
    */
   async connect(): Promise<void> {
     if (this.isReady) {
       return
     }
+    if (this._connecting) {
+      return this._connecting
+    }
 
+    this._connecting = this.performConnect().finally(() => {
+      this._connecting = null
+    })
+    return this._connecting
+  }
+
+  private async performConnect(): Promise<void> {
     try {
       const uri = this.buildConnectionUri()
 
       this.logger.trace({ connection: this.name }, 'connecting to MongoDB server')
 
+      const pool = this.config.pool || {}
+      const maxPoolSize = pool.max ?? 10
+      const minPoolSize = pool.min ?? 1
+      if (minPoolSize > maxPoolSize) {
+        throw new errors.ConnectionRefusedException(
+          `Invalid pool config for "${this.name}": min (${minPoolSize}) cannot exceed max (${maxPoolSize})`
+        )
+      }
+
       const options = {
         ...(this.config.connection?.options || {}),
-        maxPoolSize: this.config.pool?.max || 10,
-        minPoolSize: this.config.pool?.min || 1,
+        maxPoolSize,
+        minPoolSize,
       }
 
       this.client = new MongoClient(uri, options)
@@ -131,6 +152,9 @@ export class MongoConnection extends EventEmitter implements MongoConnectionCont
       )
 
       this.emit('error', error, this)
+      if (error instanceof errors.ConnectionRefusedException) {
+        throw error
+      }
       throw new errors.ConnectionRefusedException(
         `Unable to connect to MongoDB server: ${error.message}`,
         { cause: error }

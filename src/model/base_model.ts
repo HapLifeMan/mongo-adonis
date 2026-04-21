@@ -17,6 +17,18 @@ import { MongoAdapter } from './adapter.js'
 import { MongoQueryBuilder } from '../querybuilder/query_builder.js'
 
 /**
+ * Convert a string to snake_case
+ * Matches Lucid's default naming strategy behavior
+ */
+function snakeCase(str: string): string {
+  return str
+    .split('_')
+    .map((part) => part.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase())
+    .join('_')
+    .replace(/_+/g, '_')
+}
+
+/**
  * ------------------------------------------------------
  * Custom Lucid Types
  * ------------------------------------------------------
@@ -83,6 +95,7 @@ export interface MongoModelConstructor {
   primaryKey: string
   collection: string
   connection: string
+  tableName(): string
   query<T extends MongoModel>(this: new () => T): MongoQueryBuilder<T>
   all<T extends MongoModel>(this: new () => T): Promise<T[]>
   find<T extends MongoModel>(this: new () => T, _id: string | ObjectId): Promise<T | null>
@@ -203,9 +216,14 @@ export class MongoModel extends Macroable implements LucidRow {
   public static boot(): void {
     if (this.booted) return
     if (!this.collection) {
-      this.collection = pluralize(this.name).toLowerCase()
+      this.collection = pluralize(snakeCase(this.name))
     }
     this.booted = true
+  }
+
+  public static tableName(): string {
+    this.boot()
+    return this.collection
   }
 
   public static query<T extends MongoModel>(): MongoQueryBuilder<T> {
@@ -345,7 +363,7 @@ export class MongoModel extends Macroable implements LucidRow {
     return this.fill(attributes)
   }
 
-  public async save(): Promise<this> {
+  public async save(options: { refresh?: boolean } = {}): Promise<this> {
     const Constructor = this.$constructor
     const query = Constructor.query()
 
@@ -365,21 +383,32 @@ export class MongoModel extends Macroable implements LucidRow {
     }
 
     const attributes = this.toObject()
+    const primaryKey = this.$primaryKey
 
     if (isNew) {
       const id = await query.insert(attributes as any)
       this.$primaryKeyValue = id
+      this[primaryKey] = id
+      attributes[primaryKey] = id
       this.$isNew = false
       this.$isPersisted = true
       this.$isLocal = false
       this.$hydrated = true
-      await this.refresh()
     } else {
       if (!this.$primaryKeyValue) {
         throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when updating model`)
       }
-      await query.where(this.$primaryKey, this.$primaryKeyValue).update({ $set: attributes })
+      await query.where(primaryKey, this.$primaryKeyValue).update({ $set: attributes })
+    }
+
+    if (options.refresh) {
       await this.refresh()
+    } else {
+      // Sync the dirty baseline without a second round trip. Callers that need
+      // server-side values (e.g. after $inc, triggers, or schema defaults) can
+      // opt in with { refresh: true } or call refresh() explicitly.
+      this.$attributes = { ...attributes }
+      this.$original = { ...attributes }
     }
 
     if (typeof Constructor.afterSave === 'function') {
@@ -528,33 +557,34 @@ export class MongoModel extends Macroable implements LucidRow {
     return this
   }
 
-  // FIXED: Return 'any' to satisfy LazyLoadAggregatesContract requirements from Auth package
   public loadAggregate(_relation: any, _callback?: any): any {
-    return {
-      loadAggregate: () => this,
-      loadCount: () => this,
-      exec: async () => { }
-    }
+    throw new errors.NotImplementedException(
+      'loadAggregate() is not implemented. Use .aggregate() on the query builder directly.'
+    )
   }
 
   public loadCount(_relation: any, _callback?: any): any {
-    return {
-      loadAggregate: () => this,
-      loadCount: () => this,
-      exec: async () => { }
-    }
+    throw new errors.NotImplementedException(
+      'loadCount() is not implemented. Run a count query via the related query builder directly.'
+    )
   }
 
-  public async load(_relation: any, _callback?: any): Promise<void> {
-    return
+  public async load(relation: any, _callback?: any): Promise<void> {
+    throw new errors.NotImplementedException(
+      `load("${relation}") is not implemented. Access the relation directly (e.g. "await model.${relation}.exec()") until eager loading lands.`
+    )
   }
 
-  public async preload(_relation: any, _callback?: any): Promise<void> {
-    return
+  public async preload(relation: any, _callback?: any): Promise<void> {
+    throw new errors.NotImplementedException(
+      `preload("${relation}") is not implemented. Access the relation directly (e.g. "await model.${relation}.exec()") until eager loading lands.`
+    )
   }
 
-  public async loadOnce(_relation: any, _callback?: any): Promise<void> {
-    return
+  public async loadOnce(relation: any, _callback?: any): Promise<void> {
+    throw new errors.NotImplementedException(
+      `loadOnce("${relation}") is not implemented. Access the relation directly (e.g. "await model.${relation}.exec()") until eager loading lands.`
+    )
   }
 
   public $setAttribute(key: string, value: any): void {

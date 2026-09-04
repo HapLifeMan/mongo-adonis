@@ -20,10 +20,10 @@ This document provides a comparison between the standard Lucid ORM methods and o
 | `query()` | ✅ | ✅ | Both implementations support query builder |
 | `firstOrCreate(search, save?)` | ✅ | ✅ | Both implementations support find or create |
 | `firstOrNew(search, data?)` | ❌ | ✅ | MongoDB-specific method |
-| `fetchOrCreateMany(key, objects[])` | ✅ | ❌ | Not implemented in MongoDB version |
+| `fetchOrCreateMany(key, objects[])` | ✅ | ✅ | One `find` plus at most one `insertMany`, whatever the payload size — Lucid writes one row at a time |
 | `updateOrCreate(search, data)` | ✅ | ✅ | Both implementations support update or create |
-| `updateOrCreateMany(key, objects[])` | ✅ | ❌ | Not implemented in MongoDB version |
-| `updateOrCreateMany(keys[], objects[])` | ✅ | ❌ | Not implemented in MongoDB version |
+| `updateOrCreateMany(key, objects[])` | ✅ | ✅ | One `find`, then at most one `insertMany` and one `bulkWrite` — Lucid writes one row at a time |
+| `updateOrCreateMany(keys[], objects[])` | ✅ | ✅ | Composite keys match on exact tuples (`$or`), not on Lucid's cross-product of `whereIn`s |
 | `truncate()` | ❌ | ✅ | MongoDB-specific method to delete all records |
 | `save()` | ✅ | ✅ | Both implementations support saving a model (only the changed fields are written, via `$set`) |
 | `delete()` | ✅ | ✅ | Both implementations support deleting a model |

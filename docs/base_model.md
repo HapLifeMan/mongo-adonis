@@ -15,7 +15,9 @@ This document provides a simple overview of all methods available in the `MongoM
 | `findBy(key, value)` | Static/Query | Find a record by a key-value pair |
 | `create(data)` | Static/Create | Create a new record |
 | `createMany(data)` | Static/Create | Create multiple records |
+| `fetchOrCreateMany(uniqueKeys, payload)` | Static/Create | Fetch the rows matching the unique keys, create the missing ones |
 | `updateOrCreate(search, data)` | Static/Create | Update or create a record |
+| `updateOrCreateMany(uniqueKeys, payload)` | Static/Create | Merge into the rows matching the unique keys, create the missing ones |
 | `firstOrCreate(search, data?)` | Static/Create | Find the first matching record or create a new one |
 | `firstOrNew(search, data?)` | Static/Create | Find the first matching record or instantiate a new one |
 | `truncate()` | Static/Delete | Delete all records from the collection |
@@ -51,7 +53,7 @@ The model includes standard Lucid properties to ensure compatibility with Adonis
 - `$primaryKeyValue`: The raw primary key value (usually ObjectId).
 - `$isNew`: `true` if the model has not yet been saved to the database.
 - `$isPersisted`: `true` if the model exists in the database.
-- `$isLocal`: `true` if the model was created locally and not yet saved.
+- `$isLocal`: `true` if the model instance originated in this process rather than being fetched from the database. Saving it does not change this — which is what makes it the flag that tells created rows from fetched ones after `fetchOrCreateMany`.
 - `$isDeleted`: `true` if the model has been deleted.
 - `$dirty`: **(Getter)** An object containing only the changed attributes.
 - `$isDirty`: **(Getter)** Boolean indicating if the model has changes.
@@ -78,6 +80,8 @@ The model includes standard Lucid properties to ensure compatibility with Adonis
 ### Find or Create Methods
 
 - `updateOrCreate(search, data)`: Update or create a record
+- `fetchOrCreateMany(uniqueKeys, payload)`: Fetch the rows matching the unique keys, create the missing ones
+- `updateOrCreateMany(uniqueKeys, payload)`: Merge into the rows matching the unique keys, create the missing ones
 - `firstOrCreate(search, data?)`: Find the first matching record or create a new one
 - `firstOrNew(search, data?)`: Find the first matching record or instantiate a new one
 

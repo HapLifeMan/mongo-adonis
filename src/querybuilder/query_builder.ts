@@ -7,7 +7,14 @@
  * file that was distributed with this source code.
  */
 
-import type { Collection, Filter, Sort, UpdateFilter } from 'mongodb'
+import type {
+  AnyBulkWriteOperation,
+  BulkWriteResult,
+  Collection,
+  Filter,
+  Sort,
+  UpdateFilter,
+} from 'mongodb'
 import { EventEmitter } from 'node:events'
 import { MongoModel } from '../model/base_model.js'
 import { ObjectId } from 'mongodb'
@@ -550,6 +557,19 @@ export class MongoQueryBuilder<Model extends MongoModel = MongoModel> {
     return this.execute({ insertMany: true, data }, async (collection) => {
       const result = await collection.insertMany(data as any)
       return Object.values(result.insertedIds)
+    })
+  }
+
+  /**
+   * Send several writes in a single round trip. Operations are the driver's
+   * own (`insertOne`, `updateOne`, `deleteOne`, ...) and are **not** filtered
+   * by the builder's `where` clauses — each one carries its own filter.
+   *
+   * Unordered, so one failing operation does not abort the rest.
+   */
+  async bulkWrite(operations: AnyBulkWriteOperation<any>[]): Promise<BulkWriteResult> {
+    return this.execute({ bulkWrite: true, operations }, async (collection) => {
+      return collection.bulkWrite(operations, { ordered: false })
     })
   }
 

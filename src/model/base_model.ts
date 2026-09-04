@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import type { AnyBulkWriteOperation } from 'mongodb'
 import { ObjectId } from 'mongodb'
 import Macroable from '@poppinss/macroable'
 import pluralize from 'pluralize'
@@ -69,6 +70,215 @@ function isEqualValue(a: any, b: any): boolean {
     return keysA.length === Object.keys(b).length && keysA.every((key) => isEqualValue(a[key], b[key]))
   }
   return false
+}
+
+/**
+ * A canonical string for a unique-key value, used to bucket payload rows
+ * against fetched ones. The type tag keeps `isEqualValue`'s distinctions
+ * intact: the string '507f…' and `ObjectId('507f…')` are different values
+ * and must not land in the same bucket.
+ */
+function valueKey(value: any): string {
+  if (value instanceof ObjectId) return `oid:${value.toHexString()}`
+  if (value instanceof Date) return `date:${value.getTime()}`
+  if (value !== null && typeof value === 'object') return `json:${JSON.stringify(value)}`
+  return `${typeof value}:${String(value)}`
+}
+
+/**
+ * The composite key for one row, as one string. JSON-encoding the tagged
+ * parts keeps the encoding unambiguous, so no pair of distinct tuples can
+ * ever collapse onto the same bucket.
+ */
+const signatureKey = (values: any[]) => JSON.stringify(values.map(valueKey))
+
+/**
+ * Persist a batch of new models: per-model before hooks, one insertMany
+ * round trip, per-model after hooks. Shared by `createMany` and the
+ * fetch-or-create family.
+ */
+async function insertModels<T extends MongoModel>(Model: MongoModelConstructor & (new () => T), models: T[]): Promise<T[]> {
+  const payloads: Record<string, any>[] = []
+  for (const model of models) {
+    payloads.push(await model.$prepareForInsert())
+  }
+
+  const ids = await Model.query<T>().insertMany(payloads)
+
+  for (let i = 0; i < models.length; i++) {
+    await models[i].$finalizeInsert(ids[i], payloads[i])
+  }
+
+  return models
+}
+
+/**
+ * Persist a batch of already-loaded models: per-model before hooks, one
+ * bulkWrite round trip for the rows that actually changed, per-model after
+ * hooks. A clean model still runs its hooks, exactly as `save()` does.
+ */
+async function updateModels<T extends MongoModel>(Model: MongoModelConstructor & (new () => T), models: T[]): Promise<T[]> {
+  const operations: AnyBulkWriteOperation<any>[] = []
+
+  for (const model of models) {
+    const dirtyColumns = await model.$prepareForUpdate()
+
+    if (dirtyColumns) {
+      operations.push({
+        updateOne: {
+          filter: { [Model.primaryKey]: model.$primaryKeyValue },
+          update: { $set: dirtyColumns },
+        },
+      })
+    }
+  }
+
+  if (operations.length > 0) {
+    await Model.query<T>().bulkWrite(operations)
+  }
+
+  for (const model of models) {
+    await model.$finalizeUpdate()
+  }
+
+  return models
+}
+
+/**
+ * Shared body of `fetchOrCreateMany` and `updateOrCreateMany`.
+ *
+ * Three round trips at most, whatever the payload size: one `find` for the
+ * rows that already exist, one `insertMany` for the ones that don't, and,
+ * when merging, one `bulkWrite` for the ones that changed. Lucid issues one
+ * write per row instead; the hook order per row is the same either way.
+ */
+async function resolveMany<T extends MongoModel>(
+  Model: MongoModelConstructor & (new () => T),
+  uniqueKeys: string | string[],
+  payload: Partial<T>[],
+  options: { merge: boolean }
+): Promise<T[]> {
+  const caller = options.merge ? 'updateOrCreateMany' : 'fetchOrCreateMany'
+  const keys = Array.isArray(uniqueKeys) ? uniqueKeys : [uniqueKeys]
+
+  if (keys.length === 0) {
+    throw new errors.ModelQueryException(`"${caller}" needs at least one unique key`)
+  }
+
+  if (payload.length === 0) {
+    return []
+  }
+
+  Model.boot()
+
+  const defs: Map<string, any> | undefined = (Model.prototype as any)?.$columnsDefinitions
+  const columns = keys.map((key) => defs?.get(key)?.columnName || key)
+
+  /**
+   * Build every instance up front. `toObject()` then gives the document as
+   * it will be stored, which is the only form the unique keys can be
+   * compared in — a column with a `prepare` transformer holds a different
+   * value on the instance than in the collection.
+   */
+  const candidates = payload.map((attributes) => {
+    const model = new Model() as T
+    Object.assign(model, attributes)
+    return model
+  })
+
+  const signatures = candidates.map((model, index) => {
+    const document = model.toObject()
+
+    return columns.map((column, position) => {
+      const value = document[column]
+
+      if (value === undefined || value === null) {
+        throw new errors.ModelQueryException(
+          `Value for "${keys[position]}" is null or undefined in the "${caller}" payload at index ${index}`
+        )
+      }
+
+      return value
+    })
+  })
+
+  /**
+   * A single key is an `$in`; composite keys are an `$or` of exact tuples.
+   * Lucid uses a cross-product of `whereIn`s, which also matches
+   * combinations that are not in the payload and then discards them — here
+   * the filter asks for exactly the rows the diff is about.
+   */
+  const wanted = new Map<string, any[]>()
+  for (const signature of signatures) {
+    wanted.set(signatureKey(signature), signature)
+  }
+
+  const query = Model.query<T>()
+
+  if (columns.length === 1) {
+    query.whereIn(columns[0], [...wanted.values()].map((signature) => signature[0]))
+  } else {
+    query.where({
+      $or: [...wanted.values()].map((signature) =>
+        Object.fromEntries(columns.map((column, position) => [column, signature[position]]))
+      ),
+    })
+  }
+
+  const existing = new Map<string, T>()
+  for (const model of await query.exec()) {
+    // First row wins, should the collection hold duplicates for a key the
+    // caller declared unique — the same row Lucid's `find()` would pick.
+    const key = signatureKey(columns.map((column) => model.$attributes[column]))
+    if (!existing.has(key)) {
+      existing.set(key, model)
+    }
+  }
+
+  const resolved: T[] = []
+  const created: T[] = []
+  const merged: T[] = []
+  const seen = new Map<string, T>()
+
+  payload.forEach((attributes, index) => {
+    const key = signatureKey(signatures[index])
+
+    /**
+     * A payload that repeats a unique key resolves to a single row: the
+     * first occurrence decides whether it is fetched or created, later ones
+     * get that same instance back. Lucid would create a second row here,
+     * which the unique index the keys describe would then reject.
+     */
+    const alreadyResolved = seen.get(key) ?? existing.get(key)
+
+    if (alreadyResolved) {
+      if (options.merge) {
+        alreadyResolved.merge(attributes as Record<string, any>)
+
+        if (!seen.has(key)) {
+          merged.push(alreadyResolved)
+        }
+      }
+
+      seen.set(key, alreadyResolved)
+      resolved.push(alreadyResolved)
+      return
+    }
+
+    seen.set(key, candidates[index])
+    created.push(candidates[index])
+    resolved.push(candidates[index])
+  })
+
+  if (created.length > 0) {
+    await insertModels(Model, created)
+  }
+
+  if (merged.length > 0) {
+    await updateModels(Model, merged)
+  }
+
+  return resolved
 }
 
 /**
@@ -146,7 +356,9 @@ export interface MongoModelConstructor {
   findBy<T extends MongoModel>(this: new () => T, key: string, value: any): Promise<T | null>
   create<T extends MongoModel>(this: new () => T, data: Partial<T>): Promise<T>
   createMany<T extends MongoModel>(this: new () => T, data: Partial<T>[]): Promise<T[]>
+  fetchOrCreateMany<T extends MongoModel>(this: new () => T, uniqueKeys: string | string[], payload: Partial<T>[]): Promise<T[]>
   updateOrCreate<T extends MongoModel>(this: new () => T, search: Partial<T>, data: Partial<T>): Promise<T>
+  updateOrCreateMany<T extends MongoModel>(this: new () => T, uniqueKeys: string | string[], payload: Partial<T>[]): Promise<T[]>
   firstOrCreate<T extends MongoModel>(this: new () => T, search: Partial<T>, data?: Partial<T>): Promise<T>
   firstOrNew<T extends MongoModel>(this: new () => T, search: Partial<T>, data?: Partial<T>): Promise<T>
   truncate(): Promise<void>
@@ -347,18 +559,19 @@ export class MongoModel extends Macroable implements LucidRow {
 
     // Run per-model before hooks, then persist everything in one insertMany
     // round trip, then run per-model after hooks.
-    const payloads: Record<string, any>[] = []
-    for (const model of models) {
-      payloads.push(await model.$prepareForInsert())
-    }
+    return insertModels<T>(this, models)
+  }
 
-    const ids = await this.query<T>().insertMany(payloads)
-
-    for (let i = 0; i < models.length; i++) {
-      await models[i].$finalizeInsert(ids[i], payloads[i])
-    }
-
-    return models
+  /**
+   * Find the rows matching one or more unique keys, create the ones that are
+   * missing, and return every row in payload order. Existing rows are
+   * returned untouched — use `updateOrCreateMany` to merge into them.
+   *
+   * `$isLocal` tells the two apart: it is true only on the rows this call
+   * created.
+   */
+  public static async fetchOrCreateMany<T extends MongoModel>(this: MongoModelConstructor & (new () => T), uniqueKeys: string | string[], payload: Partial<T>[]): Promise<T[]> {
+    return resolveMany<T>(this, uniqueKeys, payload, { merge: false })
   }
 
   public static async updateOrCreate<T extends MongoModel>(this: MongoModelConstructor & (new () => T), search: Partial<T>, data: Partial<T>): Promise<T> {
@@ -372,6 +585,15 @@ export class MongoModel extends Macroable implements LucidRow {
       return model
     }
     return this.create<T>({ ...search, ...data })
+  }
+
+  /**
+   * Find the rows matching one or more unique keys, merge the payload into
+   * them, create the ones that are missing, and return every row in payload
+   * order.
+   */
+  public static async updateOrCreateMany<T extends MongoModel>(this: MongoModelConstructor & (new () => T), uniqueKeys: string | string[], payload: Partial<T>[]): Promise<T[]> {
+    return resolveMany<T>(this, uniqueKeys, payload, { merge: true })
   }
 
   public static async firstOrCreate<T extends MongoModel>(this: MongoModelConstructor & (new () => T), search: Partial<T>, data?: Partial<T>): Promise<T> {
@@ -492,8 +714,13 @@ export class MongoModel extends Macroable implements LucidRow {
     this.$primaryKeyValue = id
     this.$isNew = false
     this.$isPersisted = true
-    this.$isLocal = false
     this.$hydrated = true
+
+    // `$isLocal` is deliberately left alone: it records where the instance
+    // came from, not whether it has been written. It stays true here (the
+    // row originated in this process) and only `$consumeAdapterResult` sets
+    // it to false. That is what makes it the discriminator telling created
+    // rows from fetched ones in `fetchOrCreateMany`, and it matches Lucid.
 
     // Reflect the persisted state on the instance: attribute values become
     // consume(prepare(value)) — exactly what a fresh fetch would produce.
@@ -501,6 +728,46 @@ export class MongoModel extends Macroable implements LucidRow {
     this.$original = deepSnapshot(attributes)
 
     await this.$emitHook('afterCreate')
+    await this.$emitHook('afterSave')
+  }
+
+  /**
+   * Timestamps + before hooks, returns the columns an update should `$set`,
+   * or `null` when nothing changed. Pairs with `$finalizeUpdate`, so a batch
+   * can prepare every row, issue one write, then finalize every row.
+   */
+  public async $prepareForUpdate(): Promise<Record<string, any> | null> {
+    this.$applyTimestamps()
+    await this.$emitHook('beforeSave')
+    await this.$emitHook('beforeUpdate')
+
+    if (!this.$primaryKeyValue) {
+      throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when updating model`)
+    }
+
+    // Write only the fields that changed since the last database sync
+    const dirtyColumns = this.$dirtyColumns()
+    delete dirtyColumns[this.$primaryKey]
+
+    return Object.keys(dirtyColumns).length > 0 ? dirtyColumns : null
+  }
+
+  /**
+   * State sync + after hooks once the update round trip completed
+   */
+  public async $finalizeUpdate(options: { refresh?: boolean } = {}): Promise<void> {
+    if (options.refresh) {
+      await this.refresh()
+    } else {
+      // Sync the dirty baseline without a second round trip. Callers that need
+      // server-side values (e.g. after $inc, triggers, or schema defaults) can
+      // opt in with { refresh: true } or call refresh() explicitly.
+      const attributes = this.toObject()
+      this.processFromDatabase(attributes)
+      this.$original = deepSnapshot(attributes)
+    }
+
+    await this.$emitHook('afterUpdate')
     await this.$emitHook('afterSave')
   }
 
@@ -516,36 +783,16 @@ export class MongoModel extends Macroable implements LucidRow {
       return this
     }
 
-    this.$applyTimestamps()
-    await this.$emitHook('beforeSave')
-    await this.$emitHook('beforeUpdate')
+    const dirtyColumns = await this.$prepareForUpdate()
 
-    if (!this.$primaryKeyValue) {
-      throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when updating model`)
+    if (dirtyColumns) {
+      await this.$constructor
+        .query()
+        .where(this.$primaryKey, this.$primaryKeyValue)
+        .update({ $set: dirtyColumns })
     }
 
-    // Write only the fields that changed since the last database sync
-    const primaryKey = this.$primaryKey
-    const dirtyColumns = this.$dirtyColumns()
-    delete dirtyColumns[primaryKey]
-
-    if (Object.keys(dirtyColumns).length > 0) {
-      await this.$constructor.query().where(primaryKey, this.$primaryKeyValue).update({ $set: dirtyColumns })
-    }
-
-    if (options.refresh) {
-      await this.refresh()
-    } else {
-      // Sync the dirty baseline without a second round trip. Callers that need
-      // server-side values (e.g. after $inc, triggers, or schema defaults) can
-      // opt in with { refresh: true } or call refresh() explicitly.
-      const attributes = this.toObject()
-      this.processFromDatabase(attributes)
-      this.$original = deepSnapshot(attributes)
-    }
-
-    await this.$emitHook('afterUpdate')
-    await this.$emitHook('afterSave')
+    await this.$finalizeUpdate(options)
 
     return this
   }

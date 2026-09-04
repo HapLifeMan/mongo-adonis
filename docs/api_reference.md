@@ -109,6 +109,37 @@ const users = await User.createMany([
 ])
 ```
 
+### `fetchOrCreateMany(uniqueKeys, payload)`
+
+**Description:** Finds the records matching one or more unique keys, creates the ones that are missing, and returns every record in payload order. Existing records are returned **untouched** — use `updateOrCreateMany` to merge the payload into them.
+
+At most two round trips whatever the payload size: one `find` for the records that already exist, and one `insertMany` for the ones that don't. Lifecycle hooks still run per record — every `beforeSave`/`beforeCreate` before the insert, every `afterCreate`/`afterSave` after it.
+
+**Parameters:**
+- `uniqueKeys` (string | string[]): The property name(s) that identify a record. A composite key matches on the exact tuple, so `['platform', 'remoteId']` does not match a record that merely shares one of the two values.
+- `payload` (array): An array of objects. Every object must carry a non-null value for each unique key.
+
+**Returns:** the records, in payload order. `$isLocal` is `true` only on the ones this call created.
+
+**Throws:** `ModelQueryException` when `uniqueKeys` is empty, or when a payload object has no value for one of them.
+
+**Example:**
+```typescript
+// Ingest a batch of scraped posts without touching the ones already stored
+// (and so without overwriting a moderation decision).
+const posts = await Post.fetchOrCreateMany(
+  ['platform', 'remoteId'],
+  [
+    { platform: 'instagram', remoteId: '123', caption: 'hello' },
+    { platform: 'tiktok', remoteId: '456', caption: 'world' },
+  ]
+)
+
+const created = posts.filter((post) => post.$isLocal).length
+```
+
+A payload that repeats a unique key resolves to a single record: the first occurrence decides whether it is fetched or created, and later occurrences get that same instance back.
+
 ### `updateOrCreate(search, data)`
 
 **Description:** Updates an existing record or creates a new one.
@@ -125,6 +156,35 @@ const user = await User.updateOrCreate(
   { name: 'John Doe', age: 31 }
 )
 ```
+
+### `updateOrCreateMany(uniqueKeys, payload)`
+
+**Description:** Finds the records matching one or more unique keys, merges the payload into them, creates the ones that are missing, and returns every record in payload order. Same key semantics as `fetchOrCreateMany`.
+
+At most three round trips whatever the payload size: one `find`, one `insertMany` for the missing records, and one `bulkWrite` for the ones that actually changed. Only dirty columns are written, via `$set`, so a field the payload does not mention keeps its stored value.
+
+**Parameters:**
+- `uniqueKeys` (string | string[]): The property name(s) that identify a record
+- `payload` (array): An array of objects. Every object must carry a non-null value for each unique key.
+
+**Returns:** the records, in payload order.
+
+**Throws:** `ModelQueryException` when `uniqueKeys` is empty, or when a payload object has no value for one of them.
+
+**Example:**
+```typescript
+// Refresh the metrics on every post we already know about, and store the
+// ones we have not seen before.
+const posts = await Post.updateOrCreateMany(
+  ['platform', 'remoteId'],
+  [
+    { platform: 'instagram', remoteId: '123', views: 1200 },
+    { platform: 'tiktok', remoteId: '789', views: 40 },
+  ]
+)
+```
+
+When the payload repeats a unique key, the last occurrence wins.
 
 ### `firstOrCreate(search, data?)`
 
@@ -887,6 +947,24 @@ const ids = await User.query().insertMany([
   { name: 'Jane Smith', email: 'jane@example.com', age: 25 }
 ])
 ```
+
+### `bulkWrite(operations)`
+
+**Description:** Sends several writes in a single round trip. Operations are the driver's own (`insertOne`, `updateOne`, `updateMany`, `deleteOne`, `deleteMany`, `replaceOne`) and each carries its own filter — the builder's `where` clauses are **not** applied to them. The batch is unordered, so one failing operation does not abort the rest.
+
+**Parameters:**
+- `operations` (array): The driver's bulk write operations
+
+**Example:**
+```typescript
+// Two different updates, one round trip
+await User.query().bulkWrite([
+  { updateOne: { filter: { _id: firstId }, update: { $set: { active: true } } } },
+  { updateOne: { filter: { _id: secondId }, update: { $inc: { logins: 1 } } } },
+])
+```
+
+Prefer `updateOrCreateMany` when the batch is "look these rows up by a unique key, then write them" — it handles the diff, the model hooks and the dirty tracking. Reach for `bulkWrite` when you need an operation mix the model API does not express.
 
 ### `paginate(page, perPage)`
 

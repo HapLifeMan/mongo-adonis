@@ -8,6 +8,8 @@
  */
 
 import { ObjectId } from 'mongodb'
+import * as errors from '../errors.js'
+import { snakeCase } from '../model/base_model.js'
 import type { MongoModel, MongoModelConstructor } from '../model/base_model.js'
 
 /**
@@ -47,7 +49,7 @@ export abstract class BaseRelation {
   ) {
     this.relatedModel = relatedModel
     this.ownerModel = ownerModel
-    this.foreignKey = foreignKey || `${this.ownerModel.constructor.name.toLowerCase()}_id`
+    this.foreignKey = foreignKey || `${snakeCase(this.ownerModel.constructor.name)}_id`
     this.localKey = localKey || this.ownerModel.$primaryKey
   }
 
@@ -77,6 +79,20 @@ export abstract class BaseRelation {
   }
 
   /**
+   * Get the local key value, throwing when the owner model has none
+   * (e.g. it was never persisted)
+   */
+  protected requireLocalKeyValue(action: string): any {
+    const value = this.getLocalKeyValue()
+    if (value === undefined || value === null) {
+      throw new errors.InvalidRelationException(
+        `Cannot ${action} relation. The local key value is undefined`
+      )
+    }
+    return value
+  }
+
+  /**
    * Convert a value to ObjectId if needed
    */
   protected ensureObjectId(value: any): any {
@@ -90,4 +106,47 @@ export abstract class BaseRelation {
    * Execute the relation query
    */
   abstract exec(): Promise<any>
+}
+
+/**
+ * Shared behavior for HasOne and HasMany: the foreign key lives on the
+ * related model and points back at the owner.
+ */
+export abstract class HasOneOrMany extends BaseRelation {
+  /**
+   * Save a related model, setting its foreign key to the owner
+   */
+  async save(related: MongoModel): Promise<MongoModel> {
+    this.boot()
+
+    const localKeyValue = this.requireLocalKeyValue('save')
+    related[this.foreignKey] = this.ensureObjectId(localKeyValue)
+    await related.save()
+
+    return related
+  }
+
+  /**
+   * Create a related model, setting its foreign key to the owner
+   */
+  async create(values: Partial<MongoModel>): Promise<MongoModel> {
+    this.boot()
+
+    const localKeyValue = this.requireLocalKeyValue('create')
+    return this.relatedModel.create({
+      ...values,
+      [this.foreignKey]: this.ensureObjectId(localKeyValue),
+    })
+  }
+
+  /**
+   * Associate an existing model with the owner
+   */
+  async associate(related: MongoModel): Promise<void> {
+    this.boot()
+
+    const localKeyValue = this.requireLocalKeyValue('associate')
+    related[this.foreignKey] = this.ensureObjectId(localKeyValue)
+    await related.save()
+  }
 }

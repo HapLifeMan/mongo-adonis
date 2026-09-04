@@ -7,29 +7,13 @@
  * file that was distributed with this source code.
  */
 
-import { BaseRelation } from './base_relation.js'
-import type { MongoModel, MongoModelConstructor } from '../model/base_model.js'
+import { HasOneOrMany } from './base_relation.js'
+import type { MongoModel } from '../model/base_model.js'
 
 /**
  * HasMany relationship for MongoDB
  */
-export class HasMany extends BaseRelation {
-  constructor(
-    relatedModel: MongoModelConstructor,
-    ownerModel: MongoModel,
-    foreignKey?: string,
-    localKey?: string
-  ) {
-    super(relatedModel, ownerModel, foreignKey, localKey)
-  }
-
-  /**
-   * Set up the relationship
-   */
-  async setup(): Promise<void> {
-    this.boot()
-  }
-
+export class HasMany extends HasOneOrMany {
   /**
    * Execute the relation query
    */
@@ -37,7 +21,7 @@ export class HasMany extends BaseRelation {
     this.boot()
 
     const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
+    if (localKeyValue === undefined || localKeyValue === null) {
       return []
     }
 
@@ -47,33 +31,12 @@ export class HasMany extends BaseRelation {
   }
 
   /**
-   * Save a related model
-   */
-  async save(related: MongoModel): Promise<MongoModel> {
-    this.boot()
-
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot save relation. The local key value is undefined')
-    }
-
-    related[this.foreignKey] = this.ensureObjectId(localKeyValue)
-    await related.save()
-
-    return related
-  }
-
-  /**
    * Save multiple related models
    */
   async saveMany(relatedList: MongoModel[]): Promise<MongoModel[]> {
     this.boot()
 
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot save relation. The local key value is undefined')
-    }
-
+    const localKeyValue = this.requireLocalKeyValue('save')
     for (const related of relatedList) {
       related[this.foreignKey] = this.ensureObjectId(localKeyValue)
     }
@@ -83,60 +46,18 @@ export class HasMany extends BaseRelation {
   }
 
   /**
-   * Create a related model
-   */
-  async create(values: Partial<MongoModel>): Promise<MongoModel> {
-    this.boot()
-
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot create relation. The local key value is undefined')
-    }
-
-    const related = await this.relatedModel.create({
-      ...values,
-      [this.foreignKey]: this.ensureObjectId(localKeyValue),
-    })
-
-    return related
-  }
-
-  /**
    * Create multiple related models
    */
   async createMany(valuesList: Partial<MongoModel>[]): Promise<MongoModel[]> {
     this.boot()
 
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot create relation. The local key value is undefined')
-    }
-
-    const relatedList = await Promise.all(
-      valuesList.map((values) =>
-        this.relatedModel.create({
-          ...values,
-          [this.foreignKey]: this.ensureObjectId(localKeyValue),
-        })
-      )
+    const localKeyValue = this.requireLocalKeyValue('create')
+    return this.relatedModel.createMany(
+      valuesList.map((values) => ({
+        ...values,
+        [this.foreignKey]: this.ensureObjectId(localKeyValue),
+      }))
     )
-
-    return relatedList
-  }
-
-  /**
-   * Associate a model
-   */
-  async associate(related: MongoModel): Promise<void> {
-    this.boot()
-
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot associate relation. The local key value is undefined')
-    }
-
-    related[this.foreignKey] = this.ensureObjectId(localKeyValue)
-    await related.save()
   }
 
   /**
@@ -145,11 +66,7 @@ export class HasMany extends BaseRelation {
   async associateMany(relatedList: MongoModel[]): Promise<void> {
     this.boot()
 
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot associate relation. The local key value is undefined')
-    }
-
+    const localKeyValue = this.requireLocalKeyValue('associate')
     for (const related of relatedList) {
       related[this.foreignKey] = this.ensureObjectId(localKeyValue)
     }
@@ -164,7 +81,7 @@ export class HasMany extends BaseRelation {
     this.boot()
 
     const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
+    if (localKeyValue === undefined || localKeyValue === null) {
       return
     }
 
@@ -180,7 +97,7 @@ export class HasMany extends BaseRelation {
     this.boot()
 
     const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
+    if (localKeyValue === undefined || localKeyValue === null) {
       return
     }
 
@@ -199,9 +116,9 @@ export class HasMany extends BaseRelation {
       return
     }
 
-    const ids = relatedList.map(model => model.$primaryKeyValue)
+    const ids = relatedList.map((model) => model.$primaryKeyValue)
     await this.relatedModel.query()
-      .whereIn('_id', ids)
+      .whereIn(this.relatedModel.primaryKey, ids)
       .delete()
   }
 }

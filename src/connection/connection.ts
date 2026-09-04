@@ -141,6 +141,7 @@ export class MongoConnection extends EventEmitter implements MongoConnectionCont
 
       this._isReady = true
       this._isClosed = false
+      this.state = 'open'
 
       this.logger.trace({ connection: this.name }, 'connected to MongoDB server')
 
@@ -177,6 +178,7 @@ export class MongoConnection extends EventEmitter implements MongoConnectionCont
 
       this._isReady = false
       this._isClosed = true
+      this.state = 'closed'
 
       this.logger.trace({ connection: this.name }, 'disconnected from MongoDB server')
 

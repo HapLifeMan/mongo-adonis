@@ -40,6 +40,7 @@ export { BaseRelation } from './relations/base_relation.js'
 export { HasOne } from './relations/has_one.js'
 export { HasMany } from './relations/has_many.js'
 export { BelongsTo } from './relations/belongs_to.js'
+export { BelongsToMany } from './relations/belongs_to_many.js'
 export { hasOne, hasMany, belongsTo, belongsToMany } from './relations/decorators.js'
 
 /**

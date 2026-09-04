@@ -9,7 +9,6 @@
 
 import { ObjectId } from 'mongodb'
 import Macroable from '@poppinss/macroable'
-import Hooks from '@poppinss/hooks'
 import pluralize from 'pluralize'
 
 import * as errors from '../errors.js'
@@ -20,12 +19,56 @@ import { MongoQueryBuilder } from '../querybuilder/query_builder.js'
  * Convert a string to snake_case
  * Matches Lucid's default naming strategy behavior
  */
-function snakeCase(str: string): string {
+export function snakeCase(str: string): string {
   return str
     .split('_')
     .map((part) => part.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase())
     .join('_')
     .replace(/_+/g, '_')
+}
+
+const hasOwn = (target: any, key: string) => Object.prototype.hasOwnProperty.call(target, key)
+
+function isPlainObjectValue(value: any): boolean {
+  if (value === null || typeof value !== 'object') return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+/**
+ * Copy plain objects/arrays so `$original` is an independent snapshot —
+ * otherwise in-place mutation of a nested value would mutate the baseline
+ * too and never register as dirty. Driver types (ObjectId, Date, ...) are
+ * kept by reference and compared by value in `isEqualValue`.
+ */
+function deepSnapshot(value: any): any {
+  if (Array.isArray(value)) return value.map(deepSnapshot)
+  if (isPlainObjectValue(value)) {
+    const out: Record<string, any> = {}
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = deepSnapshot(item)
+    }
+    return out
+  }
+  return value
+}
+
+/**
+ * Structural equality for dirty checking: plain objects/arrays compare
+ * deeply, Dates by timestamp, ObjectIds by value, everything else strictly.
+ */
+function isEqualValue(a: any, b: any): boolean {
+  if (a === b) return true
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime()
+  if (a instanceof ObjectId && b instanceof ObjectId) return a.equals(b)
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, i) => isEqualValue(item, b[i]))
+  }
+  if (isPlainObjectValue(a) && isPlainObjectValue(b)) {
+    const keysA = Object.keys(a)
+    return keysA.length === Object.keys(b).length && keysA.every((key) => isEqualValue(a[key], b[key]))
+  }
+  return false
 }
 
 /**
@@ -96,6 +139,7 @@ export interface MongoModelConstructor {
   collection: string
   connection: string
   tableName(): string
+  $hydrateRow(row: Record<string, any>): MongoModel
   query<T extends MongoModel>(this: new () => T): MongoQueryBuilder<T>
   all<T extends MongoModel>(this: new () => T): Promise<T[]>
   find<T extends MongoModel>(this: new () => T, _id: string | ObjectId): Promise<T | null>
@@ -106,6 +150,7 @@ export interface MongoModelConstructor {
   firstOrCreate<T extends MongoModel>(this: new () => T, search: Partial<T>, data?: Partial<T>): Promise<T>
   firstOrNew<T extends MongoModel>(this: new () => T, search: Partial<T>, data?: Partial<T>): Promise<T>
   truncate(): Promise<void>
+  $runHook(name: string, payload: any): Promise<void>
 
   // Lifecycle hooks
   beforeCreate?(model: MongoModel): void | Promise<void>
@@ -137,7 +182,6 @@ export class MongoModel extends Macroable implements LucidRow {
   public static primaryKey: string = '_id'
   public static collection: string
   public static connection: string = 'mongodb'
-  public static $hooks = new Hooks()
 
   /**
    * ------------------------------------------------------
@@ -151,9 +195,7 @@ export class MongoModel extends Macroable implements LucidRow {
   public $isDeleted: boolean = false
   public $hydrated: boolean = false
 
-  public $tenant: any
   public $trx: any = undefined
-  public $options?: any
 
   public $original: ModelObject = {}
   public $attributes: ModelObject = {}
@@ -173,13 +215,24 @@ export class MongoModel extends Macroable implements LucidRow {
     return this.$primaryKeyValue
   }
 
+  /**
+   * Property-keyed map of attributes whose prepared (database) value differs
+   * from the last known database state.
+   */
   public get $dirty(): ModelObject {
     const dirty: ModelObject = {}
-    for (const key of Object.keys(this.$attributes)) {
-      if (this[key] !== this.$original[key]) {
+    const defs = this.$columnDefinitions()
+
+    for (const key in this) {
+      if (!hasOwn(this, key) || key.startsWith('$')) continue
+      const def = defs?.get(key)
+      const columnName = def?.columnName || key
+      const prepared = def && typeof def.prepare === 'function' ? def.prepare(this[key]) : this[key]
+      if (!isEqualValue(prepared, this.$original[columnName])) {
         dirty[key] = this[key]
       }
     }
+
     return dirty
   }
 
@@ -214,11 +267,19 @@ export class MongoModel extends Macroable implements LucidRow {
    * ------------------------------------------------------
    */
   public static boot(): void {
-    if (this.booted) return
-    if (!this.collection) {
-      this.collection = pluralize(snakeCase(this.name))
-    }
+    // `booted` is static: without the own-property check a subclass would
+    // inherit the parent's `true` and never boot itself.
+    if (hasOwn(this, 'booted') && this.booted) return
     this.booted = true
+
+    // An explicitly assigned collection is inherited by subclasses, but a
+    // name that was auto-derived from a parent's class name is re-derived
+    // for each subclass.
+    const inheritedAutoDerived = (this as any).$collectionAutoDerived === true && !hasOwn(this, 'collection')
+    if (!this.collection || inheritedAutoDerived) {
+      this.collection = pluralize(snakeCase(this.name))
+      ;(this as any).$collectionAutoDerived = true
+    }
   }
 
   public static tableName(): string {
@@ -226,87 +287,81 @@ export class MongoModel extends Macroable implements LucidRow {
     return this.collection
   }
 
-  public static query<T extends MongoModel>(): MongoQueryBuilder<T> {
+  public static query<T extends MongoModel>(this: MongoModelConstructor & (new () => T)): MongoQueryBuilder<T> {
     this.boot()
-    const queryBuilder = this.$adapter.query(this).as<MongoQueryBuilder<T>>()
-    if (queryBuilder instanceof MongoQueryBuilder) {
-      queryBuilder['modelConstructor'] = this
-    }
-    return queryBuilder
+    return this.$adapter.query<T>(this)
   }
 
-  public static async all<T extends MongoModel>(): Promise<T[]> {
+  public static async all<T extends MongoModel>(this: MongoModelConstructor & (new () => T)): Promise<T[]> {
     return this.query<T>().all()
   }
 
-  private static createModelFromResult<T extends MongoModel>(result: Record<string, any> | null): T | null {
-    if (!result) {
-      return null
-    }
+  /**
+   * Build a fully-hydrated model instance from a raw database row.
+   * The single hydration path used by the query builder, refresh and finders.
+   */
+  public static $hydrateRow<T extends MongoModel>(this: any, row: Record<string, any>): T {
     const model = new this() as T
-
-    model.processFromDatabase(result)
-    model.$primaryKeyValue = result[this.primaryKey]
-    model.$isNew = false
-    model.$isPersisted = true
-    model.$isLocal = false
-    model.$hydrated = true
-    model.$original = { ...model.toObject() }
-
+    model.$consumeAdapterResult(row)
     return model
   }
 
-  public static async find<T extends MongoModel>(_id: string | ObjectId): Promise<T | null> {
+  public static async find<T extends MongoModel>(this: MongoModelConstructor & (new () => T), _id: string | ObjectId): Promise<T | null> {
     const query = this.query<T>()
-    const constructor = this as unknown as MongoModelConstructor
-    if (typeof constructor.beforeFind === 'function') {
-      await constructor.beforeFind(query)
-    }
+    await this.$runHook('beforeFind', query)
 
-    const objectId = typeof _id === 'string' ? new ObjectId(_id) : _id
-    const result = await query.where(this.primaryKey, objectId).first()
-    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
+    // Coerce only valid ObjectId strings so custom (non-ObjectId) primary
+    // keys keep working.
+    const idValue = typeof _id === 'string' && ObjectId.isValid(_id) ? new ObjectId(_id) : _id
+    const model = await query.where(this.primaryKey, idValue).first()
 
-    if (model && typeof constructor.afterFind === 'function') {
-      await constructor.afterFind(model)
-    }
+    if (model) await this.$runHook('afterFind', model)
     return model
   }
 
-  public static async findBy<T extends MongoModel>(key: string, value: any): Promise<T | null> {
+  public static async findBy<T extends MongoModel>(this: MongoModelConstructor & (new () => T), key: string, value: any): Promise<T | null> {
     const query = this.query<T>()
-    const constructor = this as unknown as MongoModelConstructor
-    if (typeof constructor.beforeFind === 'function') {
-      await constructor.beforeFind(query)
-    }
+    await this.$runHook('beforeFind', query)
 
-    const result = await query.where(key, value).first()
-    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
+    const model = await query.where(key, value).first()
 
-    if (model && typeof constructor.afterFind === 'function') {
-      await constructor.afterFind(model)
-    }
+    if (model) await this.$runHook('afterFind', model)
     return model
   }
 
-  public static async create<T extends MongoModel>(data: Partial<T>): Promise<T> {
+  public static async create<T extends MongoModel>(this: MongoModelConstructor & (new () => T), data: Partial<T>): Promise<T> {
     const model = new this() as T
     Object.assign(model, data)
     await model.save()
     return model
   }
 
-  public static async createMany<T extends MongoModel>(data: Partial<T>[]): Promise<T[]> {
+  public static async createMany<T extends MongoModel>(this: MongoModelConstructor & (new () => T), data: Partial<T>[]): Promise<T[]> {
+    if (data.length === 0) return []
+
     const models = data.map((item) => {
       const model = new this() as T
       Object.assign(model, item)
       return model
     })
-    await Promise.all(models.map((model) => model.save()))
+
+    // Run per-model before hooks, then persist everything in one insertMany
+    // round trip, then run per-model after hooks.
+    const payloads: Record<string, any>[] = []
+    for (const model of models) {
+      payloads.push(await model.$prepareForInsert())
+    }
+
+    const ids = await this.query<T>().insertMany(payloads)
+
+    for (let i = 0; i < models.length; i++) {
+      await models[i].$finalizeInsert(ids[i], payloads[i])
+    }
+
     return models
   }
 
-  public static async updateOrCreate<T extends MongoModel>(search: Partial<T>, data: Partial<T>): Promise<T> {
+  public static async updateOrCreate<T extends MongoModel>(this: MongoModelConstructor & (new () => T), search: Partial<T>, data: Partial<T>): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
     const model = await query.first()
@@ -319,22 +374,20 @@ export class MongoModel extends Macroable implements LucidRow {
     return this.create<T>({ ...search, ...data })
   }
 
-  public static async firstOrCreate<T extends MongoModel>(search: Partial<T>, data?: Partial<T>): Promise<T> {
+  public static async firstOrCreate<T extends MongoModel>(this: MongoModelConstructor & (new () => T), search: Partial<T>, data?: Partial<T>): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const result = await query.first()
-    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
+    const model = await query.first()
     if (model) {
       return model
     }
     return this.create<T>({ ...search, ...(data || {}) })
   }
 
-  public static async firstOrNew<T extends MongoModel>(search: Partial<T>, data?: Partial<T>): Promise<T> {
+  public static async firstOrNew<T extends MongoModel>(this: MongoModelConstructor & (new () => T), search: Partial<T>, data?: Partial<T>): Promise<T> {
     const query = this.query<T>()
     Object.entries(search).forEach(([key, value]) => query.where(key, value))
-    const result = await query.first()
-    const model = this.createModelFromResult<T>(result as Record<string, any> | null)
+    const model = await query.first()
     if (model) {
       return model
     }
@@ -346,7 +399,17 @@ export class MongoModel extends Macroable implements LucidRow {
 
   public static async truncate(): Promise<void> {
     this.boot()
-    await this.$adapter.truncate(this)
+    await this.$adapter.truncate(this as unknown as MongoModelConstructor)
+  }
+
+  /**
+   * Run a static lifecycle hook when defined
+   */
+  public static async $runHook(name: string, payload: any): Promise<void> {
+    const fn = (this as any)[name]
+    if (typeof fn === 'function') {
+      await fn.call(this, payload)
+    }
   }
 
   /**
@@ -354,51 +417,120 @@ export class MongoModel extends Macroable implements LucidRow {
    * Instance Methods (Lucid Compatible)
    * ------------------------------------------------------
    */
+
+  /**
+   * Replace the model attributes with the given ones (mass assignment).
+   * Values are set as-is; `consume` transformations only apply to data
+   * loaded from the database.
+   */
   public fill(attributes: Record<string, any>): this {
-    this.processFromDatabase(attributes)
+    for (const key in this) {
+      if (hasOwn(this, key) && !key.startsWith('$')) {
+        delete this[key]
+      }
+    }
+    return this.merge(attributes)
+  }
+
+  /**
+   * Merge the given attributes into the existing ones
+   */
+  public merge(attributes: Record<string, any>): this {
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith('$')) {
+        this[key] = value
+      }
+    }
     return this
   }
 
-  public merge(attributes: Record<string, any>): this {
-    return this.fill(attributes)
+  /**
+   * Run a lifecycle hook defined on this model's constructor
+   */
+  private async $emitHook(name: string): Promise<void> {
+    const fn = (this.$constructor as any)[name]
+    if (typeof fn === 'function') {
+      await fn.call(this.$constructor, this)
+    }
+  }
+
+  /**
+   * Apply autoCreate/autoUpdate timestamps registered via @column.dateTime
+   */
+  private $applyTimestamps(): void {
+    const timestampColumns = this.constructor.prototype?.$timestampColumns
+    if (!timestampColumns) return
+
+    const now = new Date()
+    timestampColumns.forEach((config: { autoCreate: boolean; autoUpdate: boolean }, key: string) => {
+      // Respect user-supplied values on creation
+      if (this.$isNew && config.autoCreate && (this[key] === undefined || this[key] === null)) {
+        this[key] = now
+      }
+      if (!this.$isNew && config.autoUpdate) {
+        this[key] = now
+      }
+    })
+  }
+
+  /**
+   * Timestamps + before hooks, returns the prepared insert payload
+   */
+  public async $prepareForInsert(): Promise<Record<string, any>> {
+    this.$applyTimestamps()
+    await this.$emitHook('beforeSave')
+    await this.$emitHook('beforeCreate')
+    return this.toObject()
+  }
+
+  /**
+   * State sync + after hooks once the insert round trip completed
+   */
+  public async $finalizeInsert(id: any, attributes: Record<string, any>): Promise<void> {
+    const primaryKey = this.$primaryKey
+    attributes[primaryKey] = id
+    this.$primaryKeyValue = id
+    this.$isNew = false
+    this.$isPersisted = true
+    this.$isLocal = false
+    this.$hydrated = true
+
+    // Reflect the persisted state on the instance: attribute values become
+    // consume(prepare(value)) — exactly what a fresh fetch would produce.
+    this.processFromDatabase(attributes)
+    this.$original = deepSnapshot(attributes)
+
+    await this.$emitHook('afterCreate')
+    await this.$emitHook('afterSave')
   }
 
   public async save(options: { refresh?: boolean } = {}): Promise<this> {
-    const Constructor = this.$constructor
-    const query = Constructor.query()
+    if (this.$isNew) {
+      const attributes = await this.$prepareForInsert()
+      const id = await this.$constructor.query().insert(attributes)
+      await this.$finalizeInsert(id, attributes)
 
-    if (typeof Constructor.beforeSave === 'function') {
-      await Constructor.beforeSave(this)
+      if (options.refresh) {
+        await this.refresh()
+      }
+      return this
     }
 
-    const isNew = this.$isNew
-    if (isNew) {
-      if (typeof Constructor.beforeCreate === 'function') {
-        await Constructor.beforeCreate(this)
-      }
-    } else {
-      if (typeof Constructor.beforeUpdate === 'function') {
-        await Constructor.beforeUpdate(this)
-      }
+    this.$applyTimestamps()
+    await this.$emitHook('beforeSave')
+    await this.$emitHook('beforeUpdate')
+
+    if (!this.$primaryKeyValue) {
+      throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when updating model`)
     }
 
-    const attributes = this.toObject()
+    // Write only the fields that changed since the last database sync
     const primaryKey = this.$primaryKey
+    const dirtyColumns = this.$dirtyColumns()
+    delete dirtyColumns[primaryKey]
 
-    if (isNew) {
-      const id = await query.insert(attributes as any)
-      this.$primaryKeyValue = id
-      this[primaryKey] = id
-      attributes[primaryKey] = id
-      this.$isNew = false
-      this.$isPersisted = true
-      this.$isLocal = false
-      this.$hydrated = true
-    } else {
-      if (!this.$primaryKeyValue) {
-        throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when updating model`)
-      }
-      await query.where(primaryKey, this.$primaryKeyValue).update({ $set: attributes })
+    if (Object.keys(dirtyColumns).length > 0) {
+      await this.$constructor.query().where(primaryKey, this.$primaryKeyValue).update({ $set: dirtyColumns })
     }
 
     if (options.refresh) {
@@ -407,22 +539,13 @@ export class MongoModel extends Macroable implements LucidRow {
       // Sync the dirty baseline without a second round trip. Callers that need
       // server-side values (e.g. after $inc, triggers, or schema defaults) can
       // opt in with { refresh: true } or call refresh() explicitly.
-      this.$attributes = { ...attributes }
-      this.$original = { ...attributes }
+      const attributes = this.toObject()
+      this.processFromDatabase(attributes)
+      this.$original = deepSnapshot(attributes)
     }
 
-    if (typeof Constructor.afterSave === 'function') {
-      await Constructor.afterSave(this)
-    }
-    if (isNew) {
-      if (typeof Constructor.afterCreate === 'function') {
-        await Constructor.afterCreate(this)
-      }
-    } else {
-      if (typeof Constructor.afterUpdate === 'function') {
-        await Constructor.afterUpdate(this)
-      }
-    }
+    await this.$emitHook('afterUpdate')
+    await this.$emitHook('afterSave')
 
     return this
   }
@@ -431,18 +554,13 @@ export class MongoModel extends Macroable implements LucidRow {
     if (this.$isNew || !this.$primaryKeyValue) {
       throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when deleting model`)
     }
-    const Constructor = this.$constructor
-    if (typeof Constructor.beforeDelete === 'function') {
-      await Constructor.beforeDelete(this)
-    }
+    await this.$emitHook('beforeDelete')
 
-    await Constructor.query().where(this.$primaryKey, this.$primaryKeyValue).delete()
+    await this.$constructor.query().where(this.$primaryKey, this.$primaryKeyValue).delete()
     this.$isDeleted = true
     this.$isPersisted = false
 
-    if (typeof Constructor.afterDelete === 'function') {
-      await Constructor.afterDelete(this)
-    }
+    await this.$emitHook('afterDelete')
   }
 
   public async refresh(): Promise<this> {
@@ -450,41 +568,37 @@ export class MongoModel extends Macroable implements LucidRow {
       throw new errors.ModelPrimaryKeyMissingException(`Missing primary key value when refreshing model`)
     }
 
-    const Constructor = this.$constructor
-    const result = await Constructor.query().where(this.$primaryKey, this.$primaryKeyValue).first()
+    const result = await this.$constructor.query().where(this.$primaryKey, this.$primaryKeyValue).first()
 
     if (!result) {
-      this.$isNew = true
-      this.$isPersisted = false
-      this.$primaryKeyValue = undefined
-      return this
+      throw new errors.ModelQueryException(
+        `Cannot refresh model "${this.constructor.name}". The row for primary key "${this.$primaryKeyValue}" no longer exists`
+      )
     }
 
-    this.processFromDatabase(result as Record<string, any>)
-    this.$original = { ...this.toObject() }
-    this.$isNew = false
-    this.$isPersisted = true
+    // `result.$attributes` holds the raw database row — re-consume it here
+    // instead of round-tripping through the fetched instance's transforms.
+    this.$consumeAdapterResult((result as MongoModel).$attributes)
     this.$isDeleted = false
-    this.$hydrated = true
 
     return this
   }
 
+  /**
+   * Serialize instance values into their database representation,
+   * applying column name mappings and `prepare` transformations.
+   */
   public toObject(): ModelObject {
     const obj: Record<string, any> = {}
-    const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
+    const defs = this.$columnDefinitions()
 
     for (const key in this) {
-      if (Object.prototype.hasOwnProperty.call(this, key) && !key.startsWith('$')) {
+      if (hasOwn(this, key) && !key.startsWith('$')) {
         const value = this[key]
-        if (columnsDefinitions && columnsDefinitions.has(key)) {
-          const columnDef = columnsDefinitions.get(key)
-          const columnName = columnDef.columnName || key
-          if (typeof columnDef.prepare === 'function') {
-            obj[columnName] = columnDef.prepare(value)
-          } else {
-            obj[columnName] = value
-          }
+        const def = defs?.get(key)
+        if (def) {
+          const columnName = def.columnName || key
+          obj[columnName] = typeof def.prepare === 'function' ? def.prepare(value) : value
         } else {
           obj[key] = value
         }
@@ -495,19 +609,19 @@ export class MongoModel extends Macroable implements LucidRow {
 
   public serialize(_attributes?: any): ModelObject {
     const obj: Record<string, any> = {}
-    const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
+    const defs = this.$columnDefinitions()
     const computedDefinitions = this.constructor.prototype?.$computedDefinitions
 
     for (const key in this) {
-      if (Object.prototype.hasOwnProperty.call(this, key) && !key.startsWith('$')) {
+      if (hasOwn(this, key) && !key.startsWith('$')) {
         const value = this[key]
-        if (columnsDefinitions && columnsDefinitions.has(key)) {
-          const columnDef = columnsDefinitions.get(key)
-          if (columnDef.serialize === false) continue
-          if (columnDef.serializeAs === null) {
+        const def = defs?.get(key)
+        if (def) {
+          if (def.serialize === false) continue
+          if (def.serializeAs === null) {
             continue
-          } else if (typeof columnDef.serializeAs === 'string') {
-            obj[columnDef.serializeAs] = value
+          } else if (typeof def.serializeAs === 'string') {
+            obj[def.serializeAs] = value
           } else {
             obj[key] = value
           }
@@ -546,7 +660,7 @@ export class MongoModel extends Macroable implements LucidRow {
    */
 
   public $hydrateOriginals(): void {
-    this.$original = { ...this.$attributes }
+    this.$original = deepSnapshot(this.$attributes)
   }
 
   public enableForceUpdate(): this {
@@ -587,31 +701,19 @@ export class MongoModel extends Macroable implements LucidRow {
     )
   }
 
-  public $setAttribute(key: string, value: any): void {
-    this.$attributes[key] = value
-    this[key] = value
-  }
-
-  public $getAttribute(key: string): any {
-    return this.$attributes[key]
+  public related(name: any): any {
+    throw new errors.NotImplementedException(
+      `related("${name}") is not implemented. Access the relation property directly (e.g. "model.${name}.create()").`
+    )
   }
 
   public $getAttributeFromCache(key: string, callback: (value: any) => any): any {
-    if (this.$cachedAttributes[key]) {
+    if (key in this.$cachedAttributes) {
       return this.$cachedAttributes[key]
     }
     const value = callback(this.$attributes[key])
     this.$cachedAttributes[key] = value
     return value
-  }
-
-  public $hasAttribute(key: string): boolean {
-    return this.$attributes.hasOwnProperty(key)
-  }
-
-  public $removeAttribute(key: string): void {
-    delete this.$attributes[key]
-    delete this[key]
   }
 
   public getAttribute(key: string): any {
@@ -622,17 +724,16 @@ export class MongoModel extends Macroable implements LucidRow {
     this[key] = value
   }
 
-  public isDirty(keys?: any): boolean {
+  public isDirty(keys?: string | string[]): boolean {
     if (this.$isNew) return true
 
-    if (keys) {
-      if (Array.isArray(keys)) {
-        return keys.some(key => this[key] !== this.$original[key])
-      }
-      return this[keys] !== this.$original[keys]
+    const dirty = this.$dirty
+    if (!keys) {
+      return Object.keys(dirty).length > 0
     }
 
-    return Object.keys(this.$attributes).some((key) => this[key] !== this.$original[key])
+    const list = Array.isArray(keys) ? keys : [keys]
+    return list.some((key) => key in dirty)
   }
 
   public useTransaction(trx: any): this {
@@ -644,40 +745,12 @@ export class MongoModel extends Macroable implements LucidRow {
     return this
   }
 
-  public $setOptionsAndTrx(options?: any): void {
-    this.$options = options
-    if (options && options.client) {
-      this.$trx = options.client
-    }
-  }
-
-  public $getQueryFor(_action: 'insert' | 'update' | 'delete' | 'refresh'): any {
-    const Model = this.constructor as MongoModelConstructor
-    return Model.query()
-  }
-
-  public related(_name: any): any {
-    const Model = this.constructor as MongoModelConstructor
-    return {
-      query: () => Model.query(),
-      client: null
-    }
-  }
-
   public $getRelation(name: string): any {
     return this.$preloaded[name]
   }
 
-  public $getRelated(name: string): any {
-    return this.$getRelation(name)
-  }
-
   public $setRelation(name: string, value: any): void {
     this.$preloaded[name] = value
-  }
-
-  public $setRelated(name: string, value: any): void {
-    this.$setRelation(name, value)
   }
 
   public $pushRelation(name: string, value: any): void {
@@ -687,85 +760,98 @@ export class MongoModel extends Macroable implements LucidRow {
     (this.$preloaded[name] as any[]).push(value)
   }
 
-  public $pushRelated(name: string, value: any): void {
-    this.$pushRelation(name, value)
-  }
-
   public $hasRelation(name: string): boolean {
     return this.$preloaded.hasOwnProperty(name)
   }
 
-  public $hasRelated(name: string): boolean {
-    return this.$hasRelation(name)
-  }
-
-  public $consumeAdapterResult(adapterResult: any): void {
-    this.processFromDatabase(adapterResult)
+  /**
+   * Hydrate this instance from a raw database row
+   */
+  public $consumeAdapterResult(row: Record<string, any>): void {
+    this.processFromDatabase(row)
+    this.$primaryKeyValue = row[this.$primaryKey] ?? this.$primaryKeyValue
     this.$isNew = false
     this.$isPersisted = true
     this.$isLocal = false
     this.$hydrated = true
-    this.$original = { ...this.toObject() }
-  }
-
-  public $hydrate(row: any): void {
-    this.$consumeAdapterResult(row)
-  }
-
-  public $map(row: any): void {
-    this.processFromDatabase(row)
+    this.$original = deepSnapshot(row)
   }
 
   public clone(): this {
     const Constructor = this.constructor as any
     const instance = new Constructor()
-    instance.fill(this.toObject())
+    // Round-trip through the database representation so prepare/consume
+    // transformations produce the same values a fresh fetch would.
+    instance.processFromDatabase(this.toObject())
     return instance
   }
 
-  public serializeAttributes(fields?: any, _strategy?: any): ModelObject {
-    return this.serialize(fields)
+  /**
+   * ------------------------------------------------------
+   * Column metadata helpers
+   * ------------------------------------------------------
+   */
+
+  private $columnDefinitions(): Map<string, any> | undefined {
+    return this.constructor.prototype?.$columnsDefinitions
   }
 
-  public serializeComputed(_fields?: any): ModelObject {
-    return {}
+  /**
+   * Cached columnName -> propertyName map, built once per model class
+   */
+  private $reverseColumnMap(): Map<string, string> | undefined {
+    const defs = this.$columnDefinitions()
+    if (!defs) return undefined
+
+    const proto = this.constructor.prototype
+    if (!hasOwn(proto, '$columnNameToProp') || proto.$columnNameToProp.size < defs.size) {
+      const map = new Map<string, string>()
+      for (const [prop, def] of defs.entries()) {
+        map.set(def.columnName || prop, prop)
+      }
+      proto.$columnNameToProp = map
+    }
+    return proto.$columnNameToProp
   }
 
-  public serializeRelations(_fields?: any, _strategy?: any): ModelObject {
-    return {}
+  /**
+   * Column-name-keyed map of prepared values that differ from `$original`.
+   * This is exactly the `$set` payload for an update.
+   */
+  private $dirtyColumns(): Record<string, any> {
+    const dirty: Record<string, any> = {}
+    const defs = this.$columnDefinitions()
+
+    for (const key in this) {
+      if (!hasOwn(this, key) || key.startsWith('$')) continue
+      const def = defs?.get(key)
+      const columnName = def?.columnName || key
+      const value = def && typeof def.prepare === 'function' ? def.prepare(this[key]) : this[key]
+      if (!isEqualValue(value, this.$original[columnName])) {
+        dirty[columnName] = value
+      }
+    }
+
+    return dirty
   }
 
   /**
    * Process data from DB and apply consume transformations
    */
   public processFromDatabase(data: Record<string, any>): void {
-    const columnsDefinitions = this.constructor.prototype?.$columnsDefinitions
-
-    // Sync attributes
     this.$attributes = { ...data }
+    const defs = this.$columnDefinitions()
 
-    if (!columnsDefinitions) {
+    if (!defs) {
       Object.assign(this, data)
       return
     }
 
-    Object.entries(data).forEach(([key, value]) => {
-      let propertyName = key
-      let foundColumnDef = null
-
-      for (const [propName, def] of columnsDefinitions.entries()) {
-        if (def.columnName === key || propName === key) {
-          propertyName = propName
-          foundColumnDef = def
-          break
-        }
-      }
-
-      if (foundColumnDef && typeof foundColumnDef.consume === 'function') {
-        this[propertyName] = foundColumnDef.consume(value)
-      } else {
-        this[propertyName] = value
-      }
-    })
+    const reverse = this.$reverseColumnMap()!
+    for (const [key, value] of Object.entries(data)) {
+      const propertyName = reverse.get(key) || key
+      const def = defs.get(propertyName)
+      this[propertyName] = def && typeof def.consume === 'function' ? def.consume(value) : value
+    }
   }
 }

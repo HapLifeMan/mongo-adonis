@@ -21,6 +21,7 @@ To improve test maintainability and reduce duplication, we've implemented shared
 To use the shared fixtures in your tests:
 
 ```typescript
+import { setupTest, teardownTest } from '../helpers.js'
 import {
   User,
   Post,
@@ -95,17 +96,15 @@ The `createAllTestData()` function creates a comprehensive set of test data with
 
 ## Running Tests
 
+Tests run directly from the TypeScript source (no build step required) and need a local MongoDB server on `127.0.0.1:27017`. The test database name is taken from the `DB_TEST_DATABASE` environment variable (default: `adonis_test`). A `.env.test` file at the project root is loaded automatically when present; shell environment variables take precedence.
+
 To run all tests:
 
 ```bash
-yarn test
+npm test
 ```
 
-To run a specific test file:
-
-```bash
-yarn test tests/path/to/test.spec.ts
-```
+There is no built-in way to run a single test file: `tests/setup.ts` configures japa with a fixed `tests/**/*.spec.ts` glob and does not process CLI arguments, so flags like `--tests` or `--groups` are ignored. To narrow a run, temporarily edit the `files` glob in `tests/setup.ts` (e.g. `files: ['tests/model/model.spec.ts']`).
 
 ## Test Helpers
 

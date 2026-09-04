@@ -7,9 +7,6 @@
  * file that was distributed with this source code.
  */
 
-// Ensure Map type is available
-// No imports needed here
-
 /**
  * Common options for all column decorators
  */
@@ -68,33 +65,35 @@ export type DateTimeOptions = BaseColumnOptions & {
 }
 
 /**
+ * Get (or create) a metadata Map owned by this exact prototype.
+ * Without the own-property check, a subclass would mutate the Map inherited
+ * from its parent model and leak column definitions across classes.
+ * Entries inherited from the parent are copied into the new Map.
+ */
+function ownMetadataMap(target: any, key: string): Map<string, any> {
+  if (!Object.prototype.hasOwnProperty.call(target, key)) {
+    target[key] = new Map(target[key] ?? [])
+  }
+  return target[key]
+}
+
+/**
  * Decorator to define a model column
  */
 export function column(options?: ColumnOptions): PropertyDecorator {
   return function (target: any, property: string | symbol) {
-    /**
-     * Define the column metadata on the model
-     */
-    if (!target.$columnsDefinitions) {
-      target.$columnsDefinitions = new Map()
-    }
-
     const columnName = options?.columnName || property.toString()
     const isPrimary = options?.isPrimary || false
     const serialize = options?.serialize !== false
     const serializeAs = options?.serializeAs
 
-    // Handle prepare/consume functions
-    const prepare = options?.prepare
-    const consume = options?.consume
-
-    target.$columnsDefinitions.set(property.toString(), {
+    ownMetadataMap(target, '$columnsDefinitions').set(property.toString(), {
       columnName,
       isPrimary,
       serialize,
       serializeAs,
-      prepare,
-      consume,
+      prepare: options?.prepare,
+      consume: options?.consume,
     })
 
     /**
@@ -111,68 +110,26 @@ export function column(options?: ColumnOptions): PropertyDecorator {
  */
 export namespace column {
   /**
-   * Decorator for DateTime columns with auto-create and auto-update functionality
+   * Decorator for DateTime columns with auto-create and auto-update
+   * functionality. The timestamps themselves are applied by
+   * MongoModel.save() based on this metadata.
    */
   export function dateTime(options: DateTimeOptions = {}): PropertyDecorator {
     return function (target: any, property: string | symbol) {
       // Apply the standard column decorator first
-      const columnOptions: ColumnOptions = {
+      column({
         columnName: options.columnName,
         serialize: options.serialize,
         serializeAs: options.serializeAs,
         prepare: options.prepare,
         consume: options.consume,
-      }
+      })(target, property)
 
-      column(columnOptions)(target, property)
-
-      // Store timestamp metadata on the model
-      if (!target.$timestampColumns) {
-        target.$timestampColumns = new Map()
-      }
-
-      // Add this property to the timestamps map
-      target.$timestampColumns.set(property.toString(), {
+      ownMetadataMap(target, '$timestampColumns').set(property.toString(), {
         autoCreate: options.autoCreate ?? false,
         autoUpdate: options.autoUpdate ?? false,
-        columnName: columnOptions.columnName || property.toString(),
+        columnName: options.columnName || property.toString(),
       })
-
-      // Install the hook to handle timestamps if not already done
-      if (!target.constructor.$timestampHooksInstalled) {
-        const proto = target.constructor.prototype
-
-        // Store the original save method
-        const originalSave = proto.save
-
-        // Override the save method to handle timestamps
-        proto.save = async function (...args: any[]) {
-          const now = new Date()
-
-          // Get timestamp columns from the prototype
-          const timestampColumns = this.constructor.prototype.$timestampColumns
-
-          if (timestampColumns && timestampColumns instanceof Map) {
-            timestampColumns.forEach((config, key) => {
-              // Set value on creation if autoCreate is true
-              if (this.$isNew && config.autoCreate) {
-                this[key] = now
-              }
-
-              // Update value on update if autoUpdate is true
-              if (!this.$isNew && config.autoUpdate) {
-                this[key] = now
-              }
-            })
-          }
-
-          // Call the original save method
-          return originalSave.apply(this, args)
-        }
-
-        // Mark hooks as installed to prevent duplicate installation
-        target.constructor.$timestampHooksInstalled = true
-      }
     }
   }
 }
@@ -199,19 +156,9 @@ export type ComputedOptions = {
  */
 export function computed(options?: ComputedOptions): PropertyDecorator {
   return function (target: any, property: string | symbol) {
-    /**
-     * Define the computed metadata on the model
-     */
-    if (!target.$computedDefinitions) {
-      target.$computedDefinitions = new Map()
-    }
-
-    const serialize = options?.serialize !== false
-    const serializeAs = options?.serializeAs
-
-    target.$computedDefinitions.set(property.toString(), {
-      serialize,
-      serializeAs,
+    ownMetadataMap(target, '$computedDefinitions').set(property.toString(), {
+      serialize: options?.serialize !== false,
+      serializeAs: options?.serializeAs,
     })
   }
 }

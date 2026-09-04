@@ -9,7 +9,8 @@
 
 import type { Hash } from '@adonisjs/core/hash'
 import { RuntimeException } from '@adonisjs/core/exceptions'
-import { beforeSave, type MongoModel } from './model/main.js'
+import { beforeSave } from './model/hooks.js'
+import type { MongoModel } from './model/base_model.js'
 import type { NormalizeConstructor } from '@adonisjs/core/types/helpers'
 
 type UserWithUserFinderRow = {

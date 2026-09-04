@@ -4,7 +4,8 @@
     "rootDir": "./",
     "outDir": "./build",
     "allowJs": true,
-    "lib": ["ES2015", "ES2020"],
+    "lib": ["ES2022"],
     "types": ["node"]
-  }
+  },
+  "exclude": ["node_modules", "build", "tests", "coverage"]
 }

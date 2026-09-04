@@ -8,6 +8,7 @@
  */
 
 import { BaseRelation } from './base_relation.js'
+import { snakeCase } from '../model/base_model.js'
 import type { MongoModel, MongoModelConstructor } from '../model/base_model.js'
 
 /**
@@ -21,19 +22,10 @@ export class BelongsTo extends BaseRelation {
     localKey?: string
   ) {
     // For BelongsTo, the foreign key is on the owner model
-    const relatedModelName = relatedModel.name.toLowerCase()
-
-    const defaultForeignKey = `${relatedModelName}_id`
+    const defaultForeignKey = `${snakeCase(relatedModel.name)}_id`
     const defaultLocalKey = relatedModel.primaryKey
 
     super(relatedModel, ownerModel, foreignKey || defaultForeignKey, localKey || defaultLocalKey)
-  }
-
-  /**
-   * Set up the relationship
-   */
-  async setup(): Promise<void> {
-    this.boot()
   }
 
   /**

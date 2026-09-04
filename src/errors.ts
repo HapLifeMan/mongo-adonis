@@ -21,6 +21,13 @@ export class Exception extends Error {
       this.cause = options.cause
     }
   }
+
+  /**
+   * HTTP status associated with this exception type
+   */
+  get status(): number {
+    return (this.constructor as typeof Exception).status
+  }
 }
 
 /**
@@ -28,10 +35,6 @@ export class Exception extends Error {
  */
 export class ConnectionRefusedException extends Exception {
   static status = 503
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }
 
 /**
@@ -39,10 +42,6 @@ export class ConnectionRefusedException extends Exception {
  */
 export class ConnectionNotFoundException extends Exception {
   static status = 500
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }
 
 /**
@@ -50,10 +49,6 @@ export class ConnectionNotFoundException extends Exception {
  */
 export class ModelPrimaryKeyMissingException extends Exception {
   static status = 500
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }
 
 /**
@@ -61,10 +56,6 @@ export class ModelPrimaryKeyMissingException extends Exception {
  */
 export class ModelQueryException extends Exception {
   static status = 500
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }
 
 /**
@@ -72,10 +63,6 @@ export class ModelQueryException extends Exception {
  */
 export class InvalidRelationException extends Exception {
   static status = 500
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }
 
 /**
@@ -83,10 +70,6 @@ export class InvalidRelationException extends Exception {
  */
 export class MongoDBException extends Exception {
   static status = 500
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }
 
 /**
@@ -96,8 +79,4 @@ export class MongoDBException extends Exception {
  */
 export class NotImplementedException extends Exception {
   static status = 501
-
-  constructor(message: string, options?: { cause?: Error }) {
-    super(message, options)
-  }
 }

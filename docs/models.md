@@ -184,4 +184,4 @@ const users = await User.query()
   .exec()
 ```
 
-For more detailed information on querying, see the [Query Builder](./query_builder.md) documentation.
+For more detailed information on querying, see the [Query Builder Methods](./api_reference.md#query-builder-methods) section of the API reference.

@@ -26,8 +26,8 @@ Defines a one-to-one relationship where the current model has one related model.
 
 **Parameters:**
 - `Model` (function): A function returning the related model class
-- `foreignKey` (string, optional): The foreign key in the related model (default: lowercase model name + 'Id')
-- `localKey` (string, optional): The local key in this model (default: '_id')
+- `foreignKey` (string, optional): The foreign key in the related model (default: snake_case of this model's class name + '_id', e.g. `User` → `user_id`, `UserProfile` → `user_profile_id`)
+- `localKey` (string, optional): The local key in this model (default: the model's primary key, '_id')
 
 **Example:**
 ```typescript
@@ -43,8 +43,8 @@ Defines a one-to-many relationship where the current model has many related mode
 
 **Parameters:**
 - `Model` (function): A function returning the related model class
-- `foreignKey` (string, optional): The foreign key in the related model (default: lowercase model name + 'Id')
-- `localKey` (string, optional): The local key in this model (default: '_id')
+- `foreignKey` (string, optional): The foreign key in the related model (default: snake_case of this model's class name + '_id', e.g. `User` → `user_id`, `UserProfile` → `user_profile_id`)
+- `localKey` (string, optional): The local key in this model (default: the model's primary key, '_id')
 
 **Example:**
 ```typescript
@@ -60,8 +60,8 @@ Defines a many-to-one relationship where the current model belongs to a related 
 
 **Parameters:**
 - `Model` (function): A function returning the related model class
-- `foreignKey` (string, optional): The foreign key in this model (default: lowercase related model name + 'Id')
-- `localKey` (string, optional): The local key in the related model (default: '_id')
+- `foreignKey` (string, optional): The foreign key in this model (default: snake_case of the related model's class name + '_id', e.g. `User` → `user_id`)
+- `localKey` (string, optional): The local key in the related model (default: the related model's primary key, '_id')
 
 **Example:**
 ```typescript

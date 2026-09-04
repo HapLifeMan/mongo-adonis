@@ -26,7 +26,8 @@ export type MongoQueryEventNode = {
   query: any
 
   /**
-   * The duration of the query in milliseconds
+   * The duration of the query as a process.hrtime() tuple:
+   * [seconds, nanoseconds]
    */
   duration: [number, number]
 

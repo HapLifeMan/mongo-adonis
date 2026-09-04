@@ -19,8 +19,8 @@ This document provides a simple overview of all methods available in the `MongoM
 | `firstOrCreate(search, data?)` | Static/Create | Find the first matching record or create a new one |
 | `firstOrNew(search, data?)` | Static/Create | Find the first matching record or instantiate a new one |
 | `truncate()` | Static/Delete | Delete all records from the collection |
-| `registerRelationship(name, callback)` | Static/Relationship | Register a relationship method on the model |
-| `fill(attributes)` | Instance/Attribute | Fill the model with attributes |
+| `fill(attributes)` | Instance/Attribute | Replace the model attributes with the given ones |
+| `merge(attributes)` | Instance/Attribute | Merge the given attributes into the existing ones |
 | `getAttribute(key)` | Instance/Attribute | Get an attribute |
 | `setAttribute(key, value)` | Instance/Attribute | Set an attribute |
 | `isDirty(key?)` | Instance/Attribute | Check if the model is dirty |
@@ -29,9 +29,9 @@ This document provides a simple overview of all methods available in the `MongoM
 | `refresh()` | Instance/Persistence | Refresh the model from the database |
 | `toObject()` | Instance/Serialization | Convert the model to a plain object |
 | `toJSON()` | Instance/Serialization | Convert the model to JSON |
-| `serialize(attributes?)` | Instance/Serialization | Serialize model with custom logic/masking |
-| `preload(relation)` | Instance/Relation | Preload a relationship (Stub for Lucid compatibility) |
-| `load(relation)` | Instance/Relation | Load a relationship (Stub for Lucid compatibility) |
+| `serialize()` | Instance/Serialization | Serialize model respecting `serialize`/`serializeAs` column options (the optional argument is ignored) |
+| `preload(relation)` | Instance/Relation | Not implemented — throws `NotImplementedException` |
+| `load(relation)` | Instance/Relation | Not implemented — throws `NotImplementedException` |
 
 ## Static Properties
 
@@ -40,7 +40,8 @@ This document provides a simple overview of all methods available in the `MongoM
 - `primaryKey`: The primary key for the model (default: '_id')
 - `collection`: The collection name for the model
 - `connection`: The connection name for the model (default: 'mongodb')
-- `$hooks`: Hooks for the model
+
+Lifecycle hooks are stored as static methods named after the hook (`beforeSave`, `afterCreate`, ...) — see [Model Hooks](./model_hooks.md).
 
 ## Instance Properties (Lucid Compatible)
 
@@ -84,10 +85,6 @@ The model includes standard Lucid properties to ensure compatibility with Adonis
 
 - `truncate()`: Delete all records from the collection
 
-### Relationship Methods
-
-- `registerRelationship(name, callback)`: Register a relationship method on the model
-
 ## Instance Properties
 
 - `$primaryKeyValue`: The primary key value
@@ -105,7 +102,8 @@ The model includes standard Lucid properties to ensure compatibility with Adonis
 
 ### Attribute Methods
 
-- `fill(attributes)`: Fill the model with attributes
+- `fill(attributes)`: Replace the model attributes with the given ones (existing attributes are removed first)
+- `merge(attributes)`: Merge the given attributes into the existing ones (values are set as-is; `consume` transforms only apply to data loaded from the database)
 - `getAttribute(key)`: Get an attribute
 - `setAttribute(key, value)`: Set an attribute
 - `isDirty(key?)`: Check if the model is dirty
@@ -119,20 +117,25 @@ The model includes standard Lucid properties to ensure compatibility with Adonis
 ### Serialization Methods
 
 - `toObject()`: Convert the model to a plain object
-- `serialize(attributes?)`: Returns the object representation, respecting `@column({ serializeAs: null })` decorators.
+- `serialize()`: Returns the object representation, respecting `@column({ serializeAs: null })` and `@column({ serialize: false })` decorators. The method accepts an optional argument for Lucid compatibility, but it is ignored — field selection is not supported.
 - `toJSON()`: Convert the model to JSON
 
-### Lucid Compatibility (Stubs)
+### Lucid Compatibility
 
-To ensure compatibility with stricter Lucid types (used in Auth and other packages), the following methods exist but may be no-ops or stubs in the MongoDB context:
+To ensure compatibility with stricter Lucid types (used in Auth and other packages), the following methods exist but are no-ops in the MongoDB context:
 
 - `useTransaction(trx)`
 - `lockForUpdate()`
 - `enableForceUpdate()`
+
+The following methods are not implemented and **throw a `NotImplementedException`** when called (they fail loud instead of silently doing nothing). Access the relation property directly (e.g. `await model.posts.exec()`) instead:
+
 - `preload(relation)`
 - `load(relation)`
+- `loadOnce(relation)`
 - `loadCount(relation)`
 - `loadAggregate(relation)`
+- `related(name)`
 
 
 ## Usage Example

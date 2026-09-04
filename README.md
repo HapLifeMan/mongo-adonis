@@ -13,7 +13,7 @@
 - 🔌 **Seamless MongoDB Integration**: Use MongoDB with the familiar Lucid ORM API
 - 🎯 **TypeScript First**: Full type safety and autocompletion
 - 🔄 **Active Record Pattern**: Intuitive model-based database operations
-- 🔗 **Rich Relationships**: Support for HasOne, HasMany, BelongsTo relationships
+- 🔗 **Rich Relationships**: Support for HasOne, HasMany, BelongsTo, BelongsToMany relationships
 - 🎨 **Decorator Support**: Clean and declarative model definitions
 - 🔍 **Powerful Query Builder**: Fluent API for complex queries
 - 🧠 **Direct MongoDB Access**: Use MongoDB's native API directly with `db.collection.find({})`
@@ -25,8 +25,8 @@
 
 - [ ] Create boilerplate
 - [ ] Improve query builder
-- [ ] Many-to-Many relationships
-- [ ] Paginate methods
+- [x] Many-to-Many relationships
+- [x] Paginate methods
 - [ ] ? Migrations
 - [ ] ? Factories
 - [ ] ? Seeds
@@ -117,7 +117,7 @@ const activeUsers = await User.query()
 ### Relationships
 
 ```ts
-import { column, hasMany, belongsTo, ObjectId, MongoModel } from 'mongo-adonis'
+import { column, hasMany, belongsTo, ObjectId, MongoModel, HasMany, BelongsTo } from 'mongo-adonis'
 
 export class User extends MongoModel {
   @column({ isPrimary: true })
@@ -127,7 +127,7 @@ export class User extends MongoModel {
   declare name: string
 
   @hasMany(() => Post)
-  declare posts: HasMany<typeof Post>
+  declare posts: HasMany
 }
 
 export class Post extends MongoModel {
@@ -138,7 +138,7 @@ export class Post extends MongoModel {
   declare title: string
 
   @belongsTo(() => User)
-  declare user: BelongsTo<typeof User>
+  declare user: BelongsTo
 }
 ```
 
@@ -172,7 +172,7 @@ await user.posts.createMany([
 const userWithPosts = await User.query().where('_id', user._id).first()
 
 // Get all posts for a user
-const userPosts = await user.posts.all()
+const userPosts = await user.posts.exec()
 
 // Find a post and load its user
 const post = await Post.query().where('_id', postId).first()
@@ -193,7 +193,6 @@ await post.user.dissociate()
 Works seamlessly with AdonisJS 6 auth, update the `app/models/user.ts` file:
 
 ```ts
-import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
 import { MongoModel, column, withAuthFinder, ObjectId } from 'mongo-adonis'
@@ -214,10 +213,10 @@ export default class User extends compose(MongoModel, AuthFinder) {
   declare password: string
 
   @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
+  declare createdAt: Date
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
-  declare updatedAt: DateTime
+  declare updatedAt: Date
 }
 ```
 
@@ -239,6 +238,6 @@ MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 [adonisjs-url]: https://adonisjs.com
 [mongodb-image]: https://img.shields.io/badge/MongoDB-4.0--8.0-47A248
 [mongodb-url]: https://www.mongodb.com/docs/drivers/node/current/compatibility/
-[nodejs-image]: https://img.shields.io/badge/Node.js-16--22-339933
+[nodejs-image]: https://img.shields.io/badge/Node.js-%3E%3D20.12-339933
 [nodejs-url]: https://www.mongodb.com/docs/drivers/node/current/compatibility/
 [typescript-image]: https://img.shields.io/badge/TypeScript-3178C6

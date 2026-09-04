@@ -40,26 +40,26 @@ export class MongoConnectionManager implements MongoConnectionManagerContract {
    * Handles event when a connection is closed
    */
   private handleDisconnect(connection: MongoConnectionContract) {
-    const internalConnection = this.get(connection.name)
-    if (!internalConnection) {
+    const node = this.connections.get(connection.name)
+    if (!node) {
       return
     }
 
+    node.state = 'closed'
     this.emitter.emit('mongodb:connection:disconnect', connection)
-    internalConnection.state = 'closed'
   }
 
   /**
    * Handles event when a new connection is added
    */
   private handleConnect(connection: MongoConnectionContract) {
-    const internalConnection = this.get(connection.name)
-    if (!internalConnection) {
+    const node = this.connections.get(connection.name)
+    if (!node) {
       return
     }
 
+    node.state = 'open'
     this.emitter.emit('mongodb:connection:connect', connection)
-    internalConnection.state = 'open'
   }
 
   /**

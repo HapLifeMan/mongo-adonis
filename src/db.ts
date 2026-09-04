@@ -19,6 +19,8 @@ export type MongoDBClient = {
 
 // Singleton instance
 let dbInstance: MongoDBClient | null = null
+let boundDatabase: MongoDatabase | null = null
+let boundConnectionName: string | undefined
 
 /**
  * Creates a MongoDB client that allows direct access to collections using dot notation
@@ -46,6 +48,11 @@ export function createMongoDBClient(database: MongoDatabase, connectionName?: st
           {},
           {
             get: (_target, method) => {
+              // Never pretend to be a thenable: `await db.users` would
+              // otherwise hang forever waiting on a fake `then`.
+              if (typeof method === 'symbol' || method === 'then') {
+                return undefined
+              }
               return async (...args: any[]) => {
                 // Connect if not already connected
                 if (!connection.isReady) {
@@ -73,8 +80,12 @@ export function createMongoDBClient(database: MongoDatabase, connectionName?: st
  * This should be called once in your application bootstrap
  */
 export function initMongoDBClient(database: MongoDatabase, connectionName?: string): MongoDBClient {
-  if (!dbInstance) {
+  // Rebind when a different database instance (or connection) is provided,
+  // so the singleton never points at a stale, shut-down database.
+  if (!dbInstance || boundDatabase !== database || boundConnectionName !== connectionName) {
     dbInstance = createMongoDBClient(database, connectionName)
+    boundDatabase = database
+    boundConnectionName = connectionName
   }
   return dbInstance
 }

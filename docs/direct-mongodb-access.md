@@ -30,6 +30,8 @@ await db.users.updateOne(
 await db.users.deleteOne({ email: 'john@example.com' })
 ```
 
+> **Note:** The AdonisJS provider connects before the application starts handling requests, so the examples above work as-is. If you access `db` before the connection is ready (e.g. during application boot), collection method calls such as `await db.users.findOne(...)` transparently wait for the connection — but chained cursor calls like `db.users.find({}).toArray()` and non-function collection properties only work once the connection is established.
+
 ## Available Methods
 
 All MongoDB collection methods are available:

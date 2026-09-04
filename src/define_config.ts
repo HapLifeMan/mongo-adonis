@@ -106,5 +106,10 @@ export type MongoDBConfig = {
  * Define MongoDB configuration
  */
 export function defineConfig(config: MongoDBConfig): MongoDBConfig {
+  if (!config.connections || !config.connections[config.connection]) {
+    throw new Error(
+      `Invalid database config: default connection "${config.connection}" is not defined in "connections"`
+    )
+  }
   return config
 }

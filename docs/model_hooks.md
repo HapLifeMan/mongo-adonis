@@ -16,18 +16,20 @@ The MongoDB Lucid ORM supports the following hooks:
 
 | Hook | Decorator | Description | Execution Timing |
 |------|-----------|-------------|------------------|
-| `beforeCreate` | `@beforeCreate()` | Executed before a new record is created | Before `save()` when `$isNew` is true |
-| `afterCreate` | `@afterCreate()` | Executed after a new record is created | After `save()` and `refresh()` when `$isNew` was true |
-| `beforeUpdate` | `@beforeUpdate()` | Executed before an existing record is updated | Before `save()` when `$isNew` is false |
-| `afterUpdate` | `@afterUpdate()` | Executed after an existing record is updated | After `save()` and `refresh()` when `$isNew` was false |
-| `beforeSave` | `@beforeSave()` | Executed before both create and update operations | Before `save()` for both new and existing records |
-| `afterSave` | `@afterSave()` | Executed after both create and update operations | After `save()` and `refresh()` for both new and existing records |
+| `beforeCreate` | `@beforeCreate()` | Executed before a new record is created | During `save()` (before the insert) when `$isNew` is true |
+| `afterCreate` | `@afterCreate()` | Executed after a new record is created | After the insert completes, before `save()` returns |
+| `beforeUpdate` | `@beforeUpdate()` | Executed before an existing record is updated | During `save()` (before the update) when `$isNew` is false |
+| `afterUpdate` | `@afterUpdate()` | Executed after an existing record is updated | After the update completes, before `save()` returns |
+| `beforeSave` | `@beforeSave()` | Executed before both create and update operations | Before `beforeCreate`/`beforeUpdate` for both new and existing records |
+| `afterSave` | `@afterSave()` | Executed after both create and update operations | After `afterCreate`/`afterUpdate` for both new and existing records |
 | `beforeDelete` | `@beforeDelete()` | Executed before a record is deleted | Before `delete()` |
 | `afterDelete` | `@afterDelete()` | Executed after a record is deleted | After `delete()` |
-| `beforeFind` | `@beforeFind()` | Executed before finding a record | Before `find()` and `findBy()` |
-| `afterFind` | `@afterFind()` | Executed after finding a record | After `find()` and `findBy()` |
+| `beforeFind` | `@beforeFind()` | Executed before finding a record | Before the static `find()` and `findBy()` methods only |
+| `afterFind` | `@afterFind()` | Executed after finding a record | After the static `find()` and `findBy()` methods only |
 
 > **Note:** The `@beforeSave()` and `@afterSave()` decorators automatically register the method as both create and update hooks. This means that a method decorated with `@beforeSave()` will be executed for both `beforeCreate` and `beforeUpdate` operations, and a method decorated with `@afterSave()` will be executed for both `afterCreate` and `afterUpdate` operations.
+
+> **Limitation:** `beforeFind` and `afterFind` fire **only** for the static `find()` and `findBy()` methods. They are **not** triggered by `query().first()`, `query().all()` or any other query builder execution.
 
 ## Defining Hooks
 
@@ -41,6 +43,10 @@ import {
   column,
   beforeSave,
   afterSave,
+  beforeCreate,
+  afterCreate,
+  beforeUpdate,
+  afterUpdate,
   beforeFind,
   afterFind,
   beforeDelete,
@@ -144,30 +150,64 @@ public static async sendWelcomeEmail(user: User): Promise<void> {
 }
 ```
 
+### Multiple Hooks of the Same Type
+
+Multiple decorators of the same hook type on one model **chain in declaration order** — they do not replace each other. This also applies to hooks inherited from mixins: adding your own `@beforeSave()` hook does not disable the password hashing hook registered by `withAuthFinder`.
+
+```typescript
+class User extends compose(MongoModel, AuthFinder) {
+  @beforeSave()
+  public static normalizeEmail(user: User): void {
+    user.email = user.email.toLowerCase()
+  }
+
+  // withAuthFinder's password hashing beforeSave hook still runs,
+  // followed by normalizeEmail.
+}
+```
+
+### Hooks Without Decorators
+
+Plain static methods named after a hook also work without any decorator:
+
+```typescript
+class User extends MongoModel {
+  static async beforeCreate(user: User) {
+    user.role = user.role || 'user'
+  }
+}
+```
+
 ## Hook Execution Order
 
 When saving a model, hooks are executed in the following order:
 
-1. For new models:
+1. For new models (`save()` on a new instance, `create()`, `createMany()`):
+   - Timestamps from `@column.dateTime({ autoCreate: true })` are applied
    - `beforeSave`
    - `beforeCreate`
    - Database insert operation
-   - Model refresh (to get latest values)
    - `afterCreate`
    - `afterSave`
 
 2. For existing models:
+   - Timestamps from `@column.dateTime({ autoUpdate: true })` are applied
    - `beforeSave`
    - `beforeUpdate`
-   - Database update operation
-   - Model refresh (to get latest values)
+   - Database update operation (`$set` of the changed fields only)
    - `afterUpdate`
    - `afterSave`
+
+> **Note:** `save()` does not re-fetch the document from the database. After `save()`, the instance holds the values it computed locally (each column's `consume(prepare(value))`). If you need server-side values (e.g. after `$inc` updates or schema defaults), pass `{ refresh: true }` to `save()` or call `refresh()` explicitly.
+>
+> `createMany()` persists all models in a single `insertMany` round trip, but the per-model hooks above still run for each model.
 
 When finding a model, hooks are executed in the following order:
 1. `beforeFind` - receives the query builder instance
 2. Database find operation
 3. `afterFind` - receives the found model instance
+
+> **Note:** `beforeFind` and `afterFind` fire only for the static `find()` and `findBy()` methods — not for `query().first()`, `query().all()` or other query builder executions.
 
 When deleting a model, hooks are executed in the following order:
 1. `beforeDelete`
@@ -222,16 +262,17 @@ public static transformData(user: User): void {
 
 ### Logging
 
-You can use hooks for logging operations:
+You can use hooks for logging operations. Use `afterCreate`/`afterUpdate` to distinguish creates from updates — by the time `afterSave` runs, `$isNew` is always `false`, even for freshly created models:
 
 ```typescript
-@afterSave()
-public static logOperation(user: User): void {
-  if (user.$isNew === false) {
-    console.log(`User updated: ${user._id}`)
-  } else {
-    console.log(`User created: ${user._id}`)
-  }
+@afterCreate()
+public static logCreate(user: User): void {
+  console.log(`User created: ${user._id}`)
+}
+
+@afterUpdate()
+public static logUpdate(user: User): void {
+  console.log(`User updated: ${user._id}`)
 }
 ```
 
@@ -279,9 +320,9 @@ class User extends MongoModel {
   @afterCreate()
   public static async createWelcomeNotification(user: User): Promise<void> {
     // Create a welcome notification for the user
-    await user.notification.create({
-      message = `Welcome to the system, ${user.name}!`
-      type = 'welcome'
+    await user.notifications.create({
+      message: `Welcome to the system, ${user.name}!`,
+      type: 'welcome'
     })
   }
 }
@@ -571,7 +612,8 @@ import {
   MongoModel,
   column,
   beforeSave,
-  afterSave,
+  afterCreate,
+  afterUpdate,
   beforeDelete,
   afterDelete,
   beforeFind,
@@ -628,17 +670,17 @@ class User extends MongoModel {
     user.updated_at = new Date()
   }
 
-  @afterSave()
-  public static async postSaveOperations(user: User): Promise<void> {
-    // Log the operation
-    if (user.$isNew === false) {
-      console.log(`User updated: ${user.name} (${user._id})`)
-    } else {
-      console.log(`User created: ${user.name} (${user._id})`)
+  @afterCreate()
+  public static async postCreateOperations(user: User): Promise<void> {
+    console.log(`User created: ${user.name} (${user._id})`)
 
-      // Send welcome email for new users
-      await emailService.sendWelcomeEmail(user.email, user.name)
-    }
+    // Send welcome email for new users
+    await emailService.sendWelcomeEmail(user.email, user.name)
+  }
+
+  @afterUpdate()
+  public static postUpdateOperations(user: User): void {
+    console.log(`User updated: ${user.name} (${user._id})`)
   }
 
   @beforeDelete()

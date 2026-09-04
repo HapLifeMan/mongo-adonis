@@ -1,12 +1,12 @@
 {
   "name": "mongo-adonis",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "MongoDB adapter for Lucid ORM (AdonisJS 6)",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "type": "module",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=20.12.0"
   },
   "files": [
     "build",
@@ -27,8 +27,7 @@
     "build": "npm run clean && tsc && cp -r stubs build/",
     "test": "node --import ./loader.js tests/setup.ts",
     "test:coverage": "c8 node --import ./loader.js tests/setup.ts",
-    "test:ci": "npm run lint && npm run test",
-    "lint": "eslint . --ext=.ts",
+    "test:ci": "npm run test",
     "format": "prettier --write .",
     "prepublishOnly": "npm run build"
   },
@@ -55,10 +54,7 @@
     "url": "https://github.com/haplifeman/mongo-adonis/issues"
   },
   "dependencies": {
-    "@adonisjs/core": "^6.17.2",
-    "@poppinss/hooks": "^7.2",
     "@poppinss/macroable": "^1.0",
-    "@swc/core": "^1.11.11",
     "kleur": "^4.1.5",
     "mongodb": "6",
     "pluralize": "^8.0.0",
@@ -68,6 +64,7 @@
     "@adonisjs/core": "^6.0.0"
   },
   "devDependencies": {
+    "@adonisjs/core": "^6.17.2",
     "@adonisjs/tsconfig": "^1.2.0",
     "@japa/assert": "^4.0.1",
     "@japa/runner": "^3.0.0",
@@ -76,7 +73,6 @@
     "@types/pretty-hrtime": "^1.0.2",
     "c8": "^8.0.0",
     "del-cli": "^5.0.0",
-    "eslint": "^8.0.0",
     "prettier": "^3.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0"

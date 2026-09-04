@@ -178,7 +178,7 @@ These methods are available on model instances.
 
 ### `fill(attributes)`
 
-**Description:** Fills the model with attributes.
+**Description:** Replaces the model attributes with the given ones (existing attributes are removed first). Use `merge()` to keep existing attributes.
 
 **Parameters:**
 - `attributes` (object): The attributes to fill
@@ -192,6 +192,20 @@ user.fill({
   email: 'john@example.com',
   age: 30
 })
+```
+
+### `merge(attributes)`
+
+**Description:** Merges the given attributes into the existing ones. Values are set as-is; `consume` transformations only apply to data loaded from the database.
+
+**Parameters:**
+- `attributes` (object): The attributes to merge
+
+**Example:**
+```typescript
+// Merge attributes into a user
+user.merge({ age: 31 })
+await user.save()
 ```
 
 ### `getAttribute(key)`
@@ -237,16 +251,20 @@ const isDirty = user.isDirty()
 const isNameDirty = user.isDirty('name')
 ```
 
-### `save()`
+### `save(options?)`
 
-**Description:** Saves the model to the database.
+**Description:** Saves the model to the database. New models are inserted; existing models write only the changed fields (via `$set`). The instance is not re-fetched from the database — pass `{ refresh: true }` when you need server-side values.
 
-**Parameters:** None
+**Parameters:**
+- `options.refresh` (boolean, optional): Re-fetch the document from the database after saving
 
 **Example:**
 ```typescript
 // Save a user
 await user.save()
+
+// Save and re-fetch the persisted document
+await user.save({ refresh: true })
 ```
 
 ### `delete()`
@@ -263,7 +281,7 @@ await user.delete()
 
 ### `refresh()`
 
-**Description:** Refreshes the model from the database.
+**Description:** Refreshes the model from the database. Throws a `ModelQueryException` when the row no longer exists.
 
 **Parameters:** None
 
@@ -355,6 +373,10 @@ const users = await User.query()
   .where('active', true)
   .exec()
 ```
+
+> **Notes:**
+> - Repeated `where()` calls — including several on the same field, like `.where('age', '>', 18).where('age', '<', 65)` — are ANDed together.
+> - Driver values such as `ObjectId`, `Date` or `Buffer` instances are passed through untouched, in both the fluent form and the object form (and in aggregate `$match` stages).
 
 ### MongoDB Query Operators
 
@@ -741,7 +763,7 @@ const users = await User.query().offset(10).exec()
 
 ### `first()`
 
-**Description:** Executes the query and returns the first result.
+**Description:** Executes the query and returns the first result. Runs on a clone of the builder, so the builder's own `limit` is untouched and it can be reused for further queries.
 
 **Parameters:** None
 
@@ -765,7 +787,7 @@ const users = await User.query().where('active', true).all()
 
 ### `count()`
 
-**Description:** Executes the query and returns the count.
+**Description:** Executes the query and returns the count. Without a filter it uses `estimatedDocumentCount()` (fast, based on collection metadata, approximate); with a filter it runs an exact `countDocuments()`.
 
 **Parameters:** None
 
@@ -787,12 +809,26 @@ const count = await User.query().where('active', true).count()
 const users = await User.query().where('active', true).exec()
 ```
 
+### `stream()`
+
+**Description:** Streams the results one document at a time via an async iterator. Prefer this over `all()`/`exec()` for large result sets — documents are hydrated lazily and the underlying cursor is closed automatically when iteration ends (or when you `break` out).
+
+**Parameters:** None
+
+**Example:**
+```typescript
+// Iterate over all active users without loading them into memory at once
+for await (const user of User.query().where('active', true).stream()) {
+  console.log(user.email)
+}
+```
+
 ### `update(data)`
 
-**Description:** Executes the query and updates matching documents.
+**Description:** Executes the query and updates matching documents. Plain objects without update operators are wrapped in `$set` automatically.
 
 **Parameters:**
-- `data` (object): The update operations
+- `data` (object): The update operations, or a plain object of fields to `$set`
 
 **Example:**
 ```typescript
@@ -800,6 +836,11 @@ const users = await User.query().where('active', true).exec()
 const count = await User.query()
   .where('active', false)
   .update({ $set: { active: true } })
+
+// Plain objects are wrapped in $set automatically
+const count = await User.query()
+  .where('active', false)
+  .update({ active: true })
 ```
 
 ### `delete()`

@@ -77,7 +77,9 @@ export default class MongoDBServiceProvider {
 
     this.app.container.singleton(MongoQueryClient, async (resolver) => {
       const db = await resolver.make('lucid.mongodb')
-      return db.connection() as unknown as MongoQueryClient
+      const connection = db.connection()
+      await connection.connect()
+      return new MongoQueryClient(connection, db.emitter)
     })
 
     this.app.container.alias('lucid.mongodb', MongoDatabase)

@@ -8,6 +8,7 @@
  */
 
 import { BaseRelation } from './base_relation.js'
+import { snakeCase } from '../model/base_model.js'
 import type { MongoModel, MongoModelConstructor } from '../model/base_model.js'
 import { ObjectId } from 'mongodb'
 
@@ -42,16 +43,9 @@ export class BelongsToMany extends BaseRelation {
   ) {
     super(relatedModel, ownerModel, undefined, localKey)
     this.pivotModel = pivotModel
-    this.pivotForeignKey = pivotForeignKey || `${this.ownerModel.constructor.name.toLowerCase()}_id`
-    this.pivotRelatedKey = pivotRelatedKey || `${this.relatedModel.name.toLowerCase()}_id`
+    this.pivotForeignKey = pivotForeignKey || `${snakeCase(this.ownerModel.constructor.name)}_id`
+    this.pivotRelatedKey = pivotRelatedKey || `${snakeCase(this.relatedModel.name)}_id`
     this.foreignKey = relatedKey || '_id'
-  }
-
-  /**
-   * Set up the relationship
-   */
-  async setup(): Promise<void> {
-    this.boot()
   }
 
   /**
@@ -89,11 +83,7 @@ export class BelongsToMany extends BaseRelation {
   async attach(ids: string[] | ObjectId[]): Promise<void> {
     this.boot()
 
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot attach relation. The local key value is undefined')
-    }
-
+    const localKeyValue = this.requireLocalKeyValue('attach')
     const pivotRecords = ids.map(id => ({
       [this.pivotForeignKey]: this.ensureObjectId(localKeyValue),
       [this.pivotRelatedKey]: this.ensureObjectId(id)
@@ -108,11 +98,7 @@ export class BelongsToMany extends BaseRelation {
   async attachWithPivotData(data: { id: string | ObjectId, pivotData?: Record<string, any> }[]): Promise<void> {
     this.boot()
 
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot attach relation with pivot data. The local key value is undefined')
-    }
-
+    const localKeyValue = this.requireLocalKeyValue('attach')
     const pivotRecords = data.map(item => ({
       [this.pivotForeignKey]: this.ensureObjectId(localKeyValue),
       [this.pivotRelatedKey]: this.ensureObjectId(item.id),
@@ -123,20 +109,21 @@ export class BelongsToMany extends BaseRelation {
   }
 
   /**
-   * Detach one or more related models from the owner model
+   * Detach related models from the owner model.
+   * `detach()` removes all pivots; `detach([])` removes none.
    */
   async detach(ids?: string[] | ObjectId[]): Promise<void> {
     this.boot()
 
     const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
+    if (localKeyValue === undefined || localKeyValue === null) {
       return
     }
 
     const query = this.pivotModel.query()
       .where(this.pivotForeignKey, this.ensureObjectId(localKeyValue))
 
-    if (ids && ids.length > 0) {
+    if (ids) {
       query.whereIn(this.pivotRelatedKey, ids.map(id => this.ensureObjectId(id)))
     }
 
@@ -218,8 +205,10 @@ export class BelongsToMany extends BaseRelation {
       return null
     }
 
-    // Return all pivot data excluding the foreign keys
-    const { [this.pivotForeignKey]: _, [this.pivotRelatedKey]: __, ...pivotData } = pivotRecord
+    // Return all pivot data excluding the foreign keys. Serialize through
+    // toObject() so model-internal state ($attributes, $original, ...) never
+    // leaks into the returned data.
+    const { [this.pivotForeignKey]: _, [this.pivotRelatedKey]: __, ...pivotData } = pivotRecord.toObject()
     return pivotData
   }
 
@@ -229,11 +218,7 @@ export class BelongsToMany extends BaseRelation {
   async updatePivotData(id: string | ObjectId, data: Record<string, any>): Promise<void> {
     this.boot()
 
-    const localKeyValue = this.getLocalKeyValue()
-    if (!localKeyValue) {
-      throw new Error('Cannot update pivot data. The local key value is undefined')
-    }
-
+    const localKeyValue = this.requireLocalKeyValue('update pivot data on')
     await this.pivotModel.query()
       .where(this.pivotForeignKey, this.ensureObjectId(localKeyValue))
       .where(this.pivotRelatedKey, this.ensureObjectId(id))

@@ -168,6 +168,8 @@ await post.tags.detach([tag1._id])
 await post.tags.detach()
 ```
 
+> **Note:** `detach()` with no arguments removes **all** pivot records, while `detach([])` (an empty array) removes **none**.
+
 ### Syncing Relations
 
 ```typescript
@@ -193,6 +195,8 @@ await post.tags.syncWithPivotData([
 ])
 ```
 
+> **Caveat:** `sync()` (and `syncWithPivotData()`) detaches **all** existing relations and then re-attaches the given IDs. Pivot data on relations that remain in the list is recreated, not preserved — if you need to keep it, re-supply it via `syncWithPivotData()`.
+
 ### Checking Relations
 
 ```typescript
@@ -212,6 +216,8 @@ console.log(pivotData.weight) // 10
 // Update pivot data
 await post.tags.updatePivotData(tag1._id, { weight: 15 })
 ```
+
+> **Note:** `pivotData()` returns only the pivot fields — both foreign keys are excluded from the returned object. It returns `null` when no pivot record exists.
 
 ## Examples
 
